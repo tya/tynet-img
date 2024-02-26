@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -ex
+
+################################################################################
+# execution steps
+################################################################################
+##
+# setup directories for netboot
+function setup {
+  export SLUG="ubuntu-22.04.4-preinstalled-server-arm64+raspi"
+  export IMG_DIR=/usr/local/lib/img
+  export IMG_BOOT=${IMG_DIR}/boot
+  export IMG_ROOT=${IMG_DIR}/root
+  export IMG=${SLUG}.img
+  export IMG_XZ=${IMG}.xz
+  export URL="https://cdimage.ubuntu.com/releases/22.04/release/${IMG_XZ}"
+}
+
+# download img
+function download {
+  mkdir -p ${IMG_DIR}
+  set +x
+  [ ! -f ${IMG_DIR}/${IMG} ] && wget -O ${IMG_DIR}/${IMG_XZ} ${URL} && unxz ${IMG_DIR}/${IMG_XZ}
+  set -x
+}
+
+##
+# mount-img
+function mount-img {
+  kpartx -a -v ${IMG_DIR}/${IMG}
+  mkdir -p ${IMG_BOOT}
+  mkdir -p ${IMG_ROOT}
+  mount /dev/mapper/$(kpartx -l -v ${IMG_DIR}/${IMG} | cut -f1 -d' ' | head -n 1) ${IMG_BOOT}
+  mount /dev/mapper/$(kpartx -l -v ${IMG_DIR}/${IMG} | cut -f1 -d' ' | tail -n 1) ${IMG_ROOT}
+}
+
+# unmount-img
+function unmount-img {
+  umount ${IMG_BOOT}
+  umount ${IMG_ROOT}
+  kpartx -d -v ${IMG_DIR}/${IMG}
+}
+
+##
+# install netboot filesystems (/ and /boot) from img
+function install {
+  INSTALL_DIR=${1}
+  IMG_BOOT=${INSTALL_DIR}/boot
+  IMG_ROOT=${INSTALL_DIR}/root
+  mkdir -p ${INSTALL_BOOT}
+  mkdir -p ${INSTALL_ROOT}
+  cp -a ${IMG_BOOT}/* ${INSTALL_BOOT}
+  cp -a ${IMG_ROOT}/* ${INSTALL_ROOT}
+  echo -n Image installed to 1>&2
+  echo ${INSTALL_DIR}
+}
+
+##
+# run steps
+function main {
+  setup
+  download
+  mount-img
+  trap unmount-img EXIT 1 2 3 6
+  install ${1?param missing - must provide download directory}
+}
+
+################################################################################
+# entrypoint
+################################################################################
+main "$1"
