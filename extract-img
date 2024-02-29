@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -e
+
+################################################################################
+# execution steps
+################################################################################
+##
+# usage
+function usage {
+  echo Usage: download-img url [downlaod_dir]
+}
+
+# download img
+function download {
+  url=${1}
+  img=/usr/local/cache/img/$(basename ${url} .xz)
+  mkdir -p $(dirname ${img})
+  [ ! -f ${img} ] && wget -O ${img}.xz ${url} && unxz ${img}.xz
+  echo ${img}
+}
+
+##
+# mount-img $path $image_dir
+function mount-img {
+  img=${1}
+  img_dir=$(dirname ${img})
+
+  boot_mnt=${img_dir}/boot
+  root_mnt=${img_dir}/root
+  mkdir -p ${boot_mnt}
+  mkdir -p ${root_mnt}
+  
+  sudo kpartx -a -s ${img}
+  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | head -n 1) ${boot_mnt}
+  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | tail -n 1) ${root_mnt}
+
+  echo ${boot_mnt} ${root_mnt}
+}
+
+# unmount-img
+function umount-img {
+  sudo umount ${2}
+  sudo umount ${3}
+  sudo kpartx -d ${1}
+}
+
+################################################################################
+# entrypoint
+################################################################################
+url=${1?missing 1st param - $(usage)}
+dst=${2:-/exports/netboot/$(basename ${url} .img.xz | cut -d'-' -f1,2)}
+
+img=$(download ${url})
+mnts=$(mount-img ${img})
+trap "umount-img ${img} ${mnts}" EXIT 1 2 3 6
+
+for mnt in ${mnts}; do
+  d=${dst}/$(basename ${mnt})
+  mkdir -p ${d}
+  cp -a ${mnt}/* ${d}
+
+  echo -n "Image extracted to " 1>&2; echo ${d}
+done
