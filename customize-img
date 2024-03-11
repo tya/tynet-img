@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -ex
+
+################################################################################
+# functions
+################################################################################
+##
+# usage
+function usage {
+  echo Usage: customize-img-[10.0.10.13] 
+}
+
+##
+# customize_root
+function customize_root {
+  local root_dir=${1}
+  local ip=${1}
+
+  # fstab
+  local fsline="${ip}:${root_dir}/ / nfs defaults,rw,nolock,errors=remount-ro 0 0"
+  echo "${fsline}" > ${root_dir}/etc/fstab
+
+  # disable resizefs
+  touch ${root_dir}/etc/growroot-disabled
+}
+
+##
+# customize_boot
+function customize_boot {
+  local boot_dir=${1}
+  local ip=${1}
+
+  # cmdline.txt
+  local cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${ip}:${boot_dir},vers=3 rw ip=dhcp rootwait ds=nocloud;s=http://${ip}:8000/"
+  echo "${cmdline}" > ${boot_dir}/boot/cmdline.txt
+
+  # customize firmeware (why? tbd)
+  rm ${boot_dir}/boot/start4.elf
+  rm ${boot_dir}/boot/fixup4.dat
+  wget https://github.com/raspberrypi/rpi-firmware/raw/master/start4.elf -P ${boot_dir}/boot/
+  wget https://github.com/raspberrypi/rpi-firmware/raw/master/fixup4.dat -P ${boot_dir}/boot/
+}
+
+##
+# customize image for netboot
+function customize-img {
+  local kickstart_ip=${1:-"10.0.10.13"}
+  read root_dir boot_dir <<< $(./extract-img)
+  
+  customize_root ${root_dir} ${ip}
+  customize_boot ${boot_dir} ${ip}
+
+  #echo -n "Root image customization applied to  " 1>&2; echo ${root_dir}
+  #echo -n "Boot image customization applied to  " 1>&2; echo ${boot_dir}
+  echo ${root_dir} ${boot_dir}
+}
+
+################################################################################
+# entrypoint
+################################################################################
+customize-img "$@"

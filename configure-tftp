@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -ex
+
+################################################################################
+# helper functions
+################################################################################
+##
+# 
+function setup {
+  sudo apt update
+  sudo apt install tftpd-hpa
+}
+
+function config {
+  cat > /etc/default/tftp-hpa << EOF
+TFTP_USERNAME="tftp"
+TFTP_DIRECTORY="/srv/tftp"
+TFTP_ADDRESS=":69"
+TFTP_OPTIONS="--secure"
+EOF
+}
+
+function serve {
+  sudo systemctl restart tftpd-hpa
+}
+
+function main {
+  setup
+  config
+  serve
+}
+
+################################################################################
+# entrypoint
+################################################################################
+main

@@ -2,18 +2,18 @@
 set -e
 
 ################################################################################
-# execution steps
+# functions
 ################################################################################
 ##
 # usage
 function usage {
-  echo Usage: download-img url [downlaod_dir]
+  echo Usage: extact-img [URL] [DOWNLOAD_DIR]
 }
 
-# download img
-function download {
-  url=${1}
-  img=/usr/local/cache/img/$(basename ${url} .xz)
+# download-img
+function download-img {
+  local url=${1}
+  local img=/usr/local/cache/img/$(basename ${url} .xz)
   mkdir -p $(dirname ${img})
   [ ! -f ${img} ] && wget -O ${img}.xz ${url} && unxz ${img}.xz
   echo ${img}
@@ -22,42 +22,62 @@ function download {
 ##
 # mount-img $path $image_dir
 function mount-img {
-  img=${1}
-  img_dir=$(dirname ${img})
+  local img=${1}
+  local img_dir=$(dirname ${img})
+  local root_mnt=${img_dir}/root
+  local boot_mnt=${img_dir}/boot
 
-  boot_mnt=${img_dir}/boot
-  root_mnt=${img_dir}/root
-  mkdir -p ${boot_mnt}
   mkdir -p ${root_mnt}
+  mkdir -p ${boot_mnt}
   
   sudo kpartx -a -s ${img}
-  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | head -n 1) ${boot_mnt}
   sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | tail -n 1) ${root_mnt}
+  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | head -n 1) ${boot_mnt}
 
-  echo ${boot_mnt} ${root_mnt}
+  echo "${root_mnt} ${boot_mnt}"
 }
 
+##
 # unmount-img
 function umount-img {
-  sudo umount ${2}
-  sudo umount ${3}
-  sudo kpartx -d ${1}
+  local img=${1}
+  local img_dir=$(dirname ${img})
+  local root_mnt=${img_dir}/root
+  local boot_mnt=${img_dir}/boot
+
+  sudo umount ${root_mnt}
+  sudo umount ${boot_mnt}
+  sudo kpartx -d ${img}
+}
+
+##
+# install-img
+function install {
+  local src=${1}
+  local dst=${2}
+
+  mkdir -p ${dst}
+  cp -a ${src}/* ${dst}
+
+  #echo -n "Image ${src} extracted to " 1>&2; echo ${dst}
+  echo ${dst}
+}
+
+##
+# extract-img
+function extract-img {
+  url=${1:-"https://cdimage.ubuntu.com/releases/22.04/release/ubuntu-22.04.4-preinstalled-server-arm64+raspi.img.xz"}
+  dst=${2:-"/exports/netboot/$(basename ${url} .img.xz)"}
+  
+  read img <<< $(download-img ${url})
+  read root_mnt boot_mnt <<< $(mount-img ${img})
+  trap "umount-img ${img}" EXIT 1 2 3 6
+  
+  install ${root_mnt} ${dst}
+  install ${boot_mnt} ${dst}/boot
 }
 
 ################################################################################
 # entrypoint
 ################################################################################
-url=${1?missing 1st param - $(usage)}
-dst=${2:-/exports/netboot/$(basename ${url} .img.xz | cut -d'-' -f1,2)}
-
-img=$(download ${url})
-mnts=$(mount-img ${img})
-trap "umount-img ${img} ${mnts}" EXIT 1 2 3 6
-
-for mnt in ${mnts}; do
-  d=${dst}/$(basename ${mnt})
-  mkdir -p ${d}
-  cp -a ${mnt}/* ${d}
-
-  echo -n "Image extracted to " 1>&2; echo ${d}
-done
+extract-img "$@"

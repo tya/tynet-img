@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -ex
+
+################################################################################
+# helper functions
+################################################################################
+##
+# ensure fstab_line
+function fstab_line {
+  local line=$1
+  if ! grep -q "${line}" /etc/fstab
+  then
+    echo "${line}" >> /etc/fstab
+  fi
+}
+
+##
+# ensure exports line
+function exports_line {
+  local line=$1
+  if ! grep -q "${line}" /etc/exports
+  then
+    echo "${line}" >> /etc/exports
+  fi
+}
+
+
+################################################################################
+# functions
+################################################################################
+# setup nfs
+function setup-nfs {
+  local root_dir=$1
+  local node_ip=$1
+  exports_line "${root_dir} ${node_ip}(rw,sync,no_subtree_check,no_root_squash)"
+}
+
+##
+# setup tftp
+function setup-tftp {
+  local boot_dir=$1
+  local tftp_dir=$1
+  fstab_line "${boot_dir} ${ftp_dir} none defaults,bind 0 0"
+  mount ${tftp_dir}/
+}
+
+##
+# load servers with new config
+function load {
+  systemctl restart rpcbind
+  systemctl restart nfs-server
+  systemctl restart tftpd-hpa
+}
+
+##
+# run steps
+function main {
+  local tftp_dir=${1:-"/srv/tftp/12345678"}
+  local node_ip=${2:-"10.0.10.0/24"}
+
+  read root_dir boot_dir read <<< $(./customize-img)
+  setup-nfs ${root_dir} ${node_ip}
+  setup-tftp ${boot_dir} ${node_ip}
+  load
+
+  echo -n "Serve TFTP from " 1>&2; echo ${tftp_dir}
+  echo -n "Serve NFSv3 to " 1>&2; echo ${node_ip}
+}
+
+################################################################################
+# entrypoint
+################################################################################
+main "$@"
