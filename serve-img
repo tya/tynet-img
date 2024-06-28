@@ -31,7 +31,7 @@ function exports_line {
 # setup nfs
 function setup-nfs {
   local root_dir=$1
-  local node_ip=$1
+  local node_ip=$2
   exports_line "${root_dir} ${node_ip}(rw,sync,no_subtree_check,no_root_squash)"
 }
 
@@ -39,8 +39,10 @@ function setup-nfs {
 # setup tftp
 function setup-tftp {
   local boot_dir=$1
-  local tftp_dir=$1
-  fstab_line "${boot_dir} ${ftp_dir} none defaults,bind 0 0"
+  local tftp_dir=$2
+  fstab_line "${boot_dir} ${tftp_dir} none defaults,bind 0 0"
+  mkdir -p ${tftp_dir}
+  systemctl daemon-reload
   mount ${tftp_dir}/
 }
 
@@ -58,9 +60,12 @@ function main {
   local tftp_dir=${1:-"/srv/tftp/12345678"}
   local node_ip=${2:-"10.0.10.0/24"}
 
-  read root_dir boot_dir read <<< $(./customize-img)
+  local root_dir
+  read root_dir read <<< $(./customize-img)
+  local boot_dir=${root_dir}/boot
+
   setup-nfs ${root_dir} ${node_ip}
-  setup-tftp ${boot_dir} ${node_ip}
+  setup-tftp ${boot_dir} ${tftp_dir}
   load
 
   echo -n "Serve TFTP from " 1>&2; echo ${tftp_dir}

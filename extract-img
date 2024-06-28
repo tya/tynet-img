@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -Eeuo pipefail
 
 ################################################################################
 # functions
@@ -31,8 +31,8 @@ function mount-img {
   mkdir -p ${boot_mnt}
   
   sudo kpartx -a -s ${img}
-  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | tail -n 1) ${root_mnt}
-  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | head -n 1) ${boot_mnt}
+  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | tail -n 1) ${root_mnt} > /dev/null 2>&1
+  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | head -n 1) ${boot_mnt} > /dev/null 2>&1
 
   echo "${root_mnt} ${boot_mnt}"
 }
@@ -57,16 +57,13 @@ function install {
   local dst=${2}
 
   mkdir -p ${dst}
-  cp -a ${src}/* ${dst}
-
-  #echo -n "Image ${src} extracted to " 1>&2; echo ${dst}
-  echo ${dst}
+  [ -d "${dst}" ] || cp -a ${src}/* ${dst}
 }
 
 ##
 # extract-img
 function extract-img {
-  url=${1:-"https://cdimage.ubuntu.com/releases/22.04/release/ubuntu-22.04.4-preinstalled-server-arm64+raspi.img.xz"}
+  url=${1:-"https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04-preinstalled-server-arm64+raspi.img.xz"}
   dst=${2:-"/exports/netboot/$(basename ${url} .img.xz)"}
   
   read img <<< $(download-img ${url})
@@ -75,6 +72,7 @@ function extract-img {
   
   install ${root_mnt} ${dst}
   install ${boot_mnt} ${dst}/boot
+  echo ${dst}
 }
 
 ################################################################################

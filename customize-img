@@ -14,7 +14,7 @@ function usage {
 # customize_root
 function customize_root {
   local root_dir=${1}
-  local ip=${1}
+  local ip=${2}
 
   # fstab
   local fsline="${ip}:${root_dir}/ / nfs defaults,rw,nolock,errors=remount-ro 0 0"
@@ -28,31 +28,31 @@ function customize_root {
 # customize_boot
 function customize_boot {
   local boot_dir=${1}
-  local ip=${1}
+  local ip=${2}
 
   # cmdline.txt
   local cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${ip}:${boot_dir},vers=3 rw ip=dhcp rootwait ds=nocloud;s=http://${ip}:8000/"
-  echo "${cmdline}" > ${boot_dir}/boot/cmdline.txt
+  echo "${cmdline}" > ${boot_dir}/cmdline.txt
 
   # customize firmeware (why? tbd)
-  rm ${boot_dir}/boot/start4.elf
-  rm ${boot_dir}/boot/fixup4.dat
-  wget https://github.com/raspberrypi/rpi-firmware/raw/master/start4.elf -P ${boot_dir}/boot/
-  wget https://github.com/raspberrypi/rpi-firmware/raw/master/fixup4.dat -P ${boot_dir}/boot/
+  rm ${boot_dir}/start4.elf
+  rm ${boot_dir}/fixup4.dat
+  wget https://github.com/raspberrypi/rpi-firmware/raw/master/start4.elf -P ${boot_dir}/
+  wget https://github.com/raspberrypi/rpi-firmware/raw/master/fixup4.dat -P ${boot_dir}/
 }
 
 ##
 # customize image for netboot
 function customize-img {
   local kickstart_ip=${1:-"10.0.10.13"}
-  read root_dir boot_dir <<< $(./extract-img)
+  local root_dir
+  read root_dir <<< $(./extract-img)
+  local boot_dir=${root_dir}/boot
   
-  customize_root ${root_dir} ${ip}
-  customize_boot ${boot_dir} ${ip}
+  customize_root ${root_dir} ${kickstart_ip}
+  customize_boot ${boot_dir} ${kickstart_ip}
 
-  #echo -n "Root image customization applied to  " 1>&2; echo ${root_dir}
-  #echo -n "Boot image customization applied to  " 1>&2; echo ${boot_dir}
-  echo ${root_dir} ${boot_dir}
+  echo ${root_dir}
 }
 
 ################################################################################
