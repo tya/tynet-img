@@ -13,7 +13,7 @@ function usage {
 # download-img
 function download-img {
   local url=${1}
-  local img=/usr/local/cache/img/$(basename ${url} .xz)
+  local img=/var/cache/img/$(basename ${url} .xz)
   mkdir -p $(dirname ${img})
   [ ! -f ${img} ] && wget -O ${img}.xz ${url} && unxz ${img}.xz
   echo ${img}
@@ -57,14 +57,14 @@ function install {
   local dst=${2}
 
   mkdir -p ${dst}
-  [ -d "${dst}" ] || cp -a ${src}/* ${dst}
+  rsync -a ${src}/ ${dst}/
 }
 
 ##
 # extract-img
 function extract-img {
   url=${1:-"https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04-preinstalled-server-arm64+raspi.img.xz"}
-  dst=${2:-"/exports/netboot/$(basename ${url} .img.xz)"}
+  dst=${2:-"/exports/netboot/$(basename ${url} .img.xz | cut -f1,2 -d '-')"}
   
   read img <<< $(download-img ${url})
   read root_mnt boot_mnt <<< $(mount-img ${img})
