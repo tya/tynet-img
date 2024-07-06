@@ -12,7 +12,7 @@ function setup {
 }
 
 function config {
-  cat > /etc/default/tftp-hpa << EOF
+  cat > /etc/default/tftpd-hpa << EOF
 TFTP_USERNAME="tftp"
 TFTP_DIRECTORY="/srv/tftp"
 TFTP_ADDRESS=":69"
