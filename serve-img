@@ -57,7 +57,7 @@ function load {
 ##
 # run steps
 function main {
-  local tftp_dir=${1:-"/srv/tftp/12345678"}
+  local tftp_dir=${1:-"/srv/tftpboot/12345678"}
   local node_ip=${2:-"10.0.10.0/24"}
 
   local root_dir
