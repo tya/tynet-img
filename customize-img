@@ -31,7 +31,7 @@ function customize_boot {
   local ip=${2}
 
   # cmdline.txt
-  local cmdline="console=tty1 root=/dev/nfs nfsroot=${ip}:${root_dir},vers=3 rw ip=dhcp rootwait ds=nocloud;s=http://${ip}:8000/pi2/"
+  local cmdline="console=tty1 root=/dev/nfs nfsroot=${ip}:${root_dir},vers=3 rw ip=dhcp rootwait"
   echo "${cmdline}" > ${boot_dir}/cmdline.txt
 
   # customize firmeware (why? tbd)
