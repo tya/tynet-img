@@ -37,6 +37,24 @@ func TestServeCloudInit(t *testing.T) {
 			wantBody: "#cloud-config",
 		},
 		{
+			name:     "pi2 user-data ssh key",
+			path:     "/244634d3/user-data",
+			wantCode: http.StatusOK,
+			wantBody: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG",
+		},
+		{
+			name:     "pi2 user-data microk8s",
+			path:     "/244634d3/user-data",
+			wantCode: http.StatusOK,
+			wantBody: "snap install microk8s",
+		},
+		{
+			name:     "pi2 user-data metallb",
+			path:     "/244634d3/user-data",
+			wantCode: http.StatusOK,
+			wantBody: "metallb:10.0.60.1-10.0.60.254",
+		},
+		{
 			name:     "pi3 meta-data",
 			path:     "/a43386be/meta-data",
 			wantCode: http.StatusOK,
@@ -53,6 +71,18 @@ func TestServeCloudInit(t *testing.T) {
 			path:     "/a43386be/user-data",
 			wantCode: http.StatusOK,
 			wantBody: "#cloud-config",
+		},
+		{
+			name:     "pi3 user-data ssh key",
+			path:     "/a43386be/user-data",
+			wantCode: http.StatusOK,
+			wantBody: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG",
+		},
+		{
+			name:     "pi3 user-data microk8s",
+			path:     "/a43386be/user-data",
+			wantCode: http.StatusOK,
+			wantBody: "snap install microk8s",
 		},
 		{
 			name:     "unknown serial",
