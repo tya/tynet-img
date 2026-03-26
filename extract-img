@@ -63,10 +63,9 @@ function install {
 ##
 # extract-img
 function extract-img {
-  url=${1:-"https://cdimage.ubuntu.com/releases/22.04.4/release/ubuntu-22.04.4-preinstalled-server-arm64+raspi.img.xz"}
-  #url=${1:-"https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04-preinstalled-server-arm64+raspi.img.xz"}
+  url=${1:-"https://cdimage.ubuntu.com/releases/26.04/snapshot-4/ubuntu-26.04-snapshot4-preinstalled-server-arm64.img.xz"}
   dst=${2:-"/exports/netboot/$(basename ${url} .img.xz | cut -f1,2 -d '-')"}
-  
+
   read img <<< $(download-img ${url})
   read root_mnt boot_mnt <<< $(mount-img ${img})
   trap "umount-img ${img}" EXIT 1 2 3 6
