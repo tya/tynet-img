@@ -13,9 +13,9 @@ function usage {
 # download-img
 function download-img {
   local url=${1}
-  local img=/var/cache/img/$(basename ${url} .xz)
+  local img=/var/cache/img/$(basename ${url})
   mkdir -p $(dirname ${img})
-  [ ! -f ${img} ] && wget -O ${img}.xz ${url} && unxz ${img}.xz
+  [ ! -f ${img} ] && wget -O ${img} ${url} && tar -zxf ${img}
   echo ${img}
 }
 
