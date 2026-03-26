@@ -29,10 +29,10 @@ function mount-img {
 
   mkdir -p ${root_mnt}
   mkdir -p ${boot_mnt}
-  
+
   sudo kpartx -a -s ${img}
-  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | tail -n 1) ${root_mnt} > /dev/null 2>&1
-  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | head -n 1) ${boot_mnt} > /dev/null 2>&1
+  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | head -n 1) ${root_mnt} > /dev/null 2>&1
+  sudo mount /dev/mapper/$(kpartx -l -v ${img} | cut -f1 -d' ' | tail -n 1) ${boot_mnt} > /dev/null 2>&1
 
   echo "${root_mnt} ${boot_mnt}"
 }
@@ -69,7 +69,7 @@ function extract-img {
   read img <<< $(download-img ${url})
   read root_mnt boot_mnt <<< $(mount-img ${img})
   trap "umount-img ${img}" EXIT 1 2 3 6
-  
+
   install ${root_mnt} ${dst}
   install ${boot_mnt} ${dst}/boot
   echo ${dst}
