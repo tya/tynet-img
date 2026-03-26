@@ -59,9 +59,10 @@ function load {
 function main {
   local tftp_dir=${1:-"/srv/tftpboot/12345678"}
   local node_ip=${2:-"10.0.10.0/24"}
+  local serial=$(basename ${tftp_dir})
 
   local root_dir
-  read root_dir read <<< $(./customize-img)
+  read root_dir <<< $(./customize-img 10.0.10.13 ${serial})
   local boot_dir=${root_dir}/boot
 
   setup-nfs ${root_dir} ${node_ip}

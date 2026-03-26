@@ -29,9 +29,10 @@ function customize_root {
 function customize_boot {
   local boot_dir=${1}
   local ip=${2}
+  local serial=${3}
 
   # cmdline.txt
-  local cmdline="console=tty1 root=/dev/nfs nfsroot=${ip}:${root_dir},vers=3 rw ip=dhcp rootwait"
+  local cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${ip}:${root_dir},vers=3 rw ip=dhcp rootwait ds=nocloud;s=http://${ip}:8000/${serial}/"
   echo "${cmdline}" > ${boot_dir}/cmdline.txt
 
   # customize firmeware (why? tbd)
@@ -45,12 +46,13 @@ function customize_boot {
 # customize image for netboot
 function customize-img {
   local kickstart_ip=${1:-"10.0.10.13"}
+  local serial=${2:?"serial required"}
   local root_dir
   read root_dir <<< $(./extract-img)
   local boot_dir=${root_dir}/boot
-  
+
   customize_root ${root_dir} ${kickstart_ip}
-  customize_boot ${boot_dir} ${kickstart_ip}
+  customize_boot ${boot_dir} ${kickstart_ip} ${serial}
 
   echo ${root_dir}
 }
