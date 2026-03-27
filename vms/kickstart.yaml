@@ -1,0 +1,73 @@
+# Lima VM: kickstart server
+# Runs the tynet-img scripts to extract, customize, and serve the Ubuntu 26.04
+# netboot image over NFS + TFTP + HTTP.
+#
+# Uses socket_vmnet shared network so both VMs can communicate directly.
+#
+# Start: limactl start vms/kickstart.yaml
+# Shell: limactl shell kickstart
+
+vmType: vz
+os: Linux
+arch: aarch64
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: aarch64
+
+cpus: 4
+memory: "4GiB"
+disk: "40GiB"
+
+# Mount home read-write so the repo (~/src/tynet-img) is editable inside the VM.
+# Lima defaults to read-only; override here.
+mounts:
+  - location: "~"
+    writable: true
+  - location: /tmp/lima
+    writable: true
+
+networks:
+  - lima: shared
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -q
+      apt-get install -y -q \
+        kpartx \
+        nfs-kernel-server \
+        rpcbind \
+        tftpd-hpa \
+        tftp-hpa \
+        wget \
+        xz-utils \
+        rsync \
+        golang-go
+      mkdir -p /exports/netboot /srv/tftpboot /var/cache/img
+      # Symlink repo for convenience: /tynet-img -> ~/src/tynet-img
+      REPO=$(find /root /home -maxdepth 4 -name "CLAUDE.md" -path "*/tynet-img/*" 2>/dev/null | head -1 | xargs dirname 2>/dev/null || true)
+      if [ -n "$REPO" ] && [ ! -e /tynet-img ]; then
+        ln -s "$REPO" /tynet-img
+      fi
+      systemctl enable rpcbind nfs-server tftpd-hpa || true
+
+message: |
+  -----------------------------------------------------------------------
+  kickstart VM is ready.
+
+  Shell in: limactl shell kickstart
+  Repo is at ~/src/tynet-img (and symlinked to /tynet-img if found).
+
+  Find this VM's IP (for use from the node VM):
+    ip -4 addr show | grep inet
+
+  Quick start inside the VM:
+    cd ~/src/tynet-img
+    sudo ./configure-tftp
+    sudo ./serve-img /srv/tftpboot/testnode 192.168.105.0/24
+    go run ./cmd/serve-cloud-init &
+  -----------------------------------------------------------------------

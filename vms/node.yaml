@@ -1,0 +1,56 @@
+# Lima VM: test node
+# Used to manually verify NFS, TFTP, and HTTP (cloud-init) connectivity
+# against the kickstart VM. Simulates what a real Pi netboot node would do.
+#
+# Uses socket_vmnet shared network so both VMs can communicate directly.
+#
+# Start: limactl start vms/node.yaml
+# Shell: limactl shell node
+
+vmType: vz
+os: Linux
+arch: aarch64
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: aarch64
+
+cpus: 2
+memory: "2GiB"
+disk: "10GiB"
+
+networks:
+  - lima: shared
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -q
+      apt-get install -y -q \
+        nfs-common \
+        tftp-hpa \
+        curl
+
+message: |
+  -----------------------------------------------------------------------
+  node VM is ready.
+
+  Shell in: limactl shell node
+
+  Verify services against the kickstart VM (replace <kickstart-ip>):
+    # Find kickstart IP from within kickstart VM:
+    #   limactl shell kickstart -- ip -4 addr show | grep inet
+
+    # TFTP
+    tftp <kickstart-ip> -c get testnode/meta-data
+
+    # NFS
+    sudo mount -t nfs <kickstart-ip>:/exports/netboot/<image-name> /mnt
+    ls /mnt
+
+    # cloud-init HTTP
+    curl http://<kickstart-ip>:8000/testnode/meta-data
+  -----------------------------------------------------------------------

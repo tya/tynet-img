@@ -1,0 +1,13 @@
+#cloud-config
+# testnode — VM test node for local netboot validation
+# Used with the Lima kickstart VM to verify NFS/TFTP/HTTP provisioning
+# without requiring a real Raspberry Pi.
+
+users:
+  - name: ty
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: adm, sudo
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG

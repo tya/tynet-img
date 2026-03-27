@@ -85,6 +85,30 @@ func TestServeCloudInit(t *testing.T) {
 			wantBody: "snap install microk8s",
 		},
 		{
+			name:     "testnode meta-data",
+			path:     "/testnode/meta-data",
+			wantCode: http.StatusOK,
+			wantBody: "instance-id: testnode",
+		},
+		{
+			name:     "testnode meta-data hostname",
+			path:     "/testnode/meta-data",
+			wantCode: http.StatusOK,
+			wantBody: "local-hostname: testnode.local",
+		},
+		{
+			name:     "testnode user-data",
+			path:     "/testnode/user-data",
+			wantCode: http.StatusOK,
+			wantBody: "#cloud-config",
+		},
+		{
+			name:     "testnode user-data ssh key",
+			path:     "/testnode/user-data",
+			wantCode: http.StatusOK,
+			wantBody: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG",
+		},
+		{
 			name:     "unknown serial",
 			path:     "/00000000/meta-data",
 			wantCode: http.StatusNotFound,
