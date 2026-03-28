@@ -26,6 +26,12 @@ mounts:
     writable: true
   - location: /tmp/lima
     writable: true
+  - location: "~/src/tynet-img/cache"
+    mountPoint: /var/cache/img
+    writable: true
+  - location: "~/src/tynet-img/exports"
+    mountPoint: /exports/netboot
+    writable: true
 
 networks:
   - lima: shared
@@ -46,14 +52,28 @@ provision:
         wget \
         xz-utils \
         rsync \
+        make \
         golang-go
-      mkdir -p /exports/netboot /srv/tftpboot /var/cache/img
+      mkdir -p /srv/tftpboot
       # Symlink repo for convenience: /tynet-img -> ~/src/tynet-img
       REPO=$(find /root /home -maxdepth 4 -name "CLAUDE.md" -path "*/tynet-img/*" 2>/dev/null | head -1 | xargs dirname 2>/dev/null || true)
       if [ -n "$REPO" ] && [ ! -e /tynet-img ]; then
         ln -s "$REPO" /tynet-img
       fi
       systemctl enable rpcbind nfs-server tftpd-hpa || true
+      # Assign static IP on the shared network interface (lima0)
+      printf '%s\n' \
+        'network:' \
+        '  version: 2' \
+        '  ethernets:' \
+        '    lima0:' \
+        '      dhcp4: false' \
+        '      addresses: [192.168.105.10/24]' \
+        '      routes:' \
+        '        - to: default' \
+        '          via: 192.168.105.1' \
+        > /etc/netplan/90-lima0-static.yaml
+      netplan apply || true
 
 message: |
   -----------------------------------------------------------------------
@@ -62,12 +82,11 @@ message: |
   Shell in: limactl shell kickstart
   Repo is at ~/src/tynet-img (and symlinked to /tynet-img if found).
 
-  Find this VM's IP (for use from the node VM):
-    ip -4 addr show | grep inet
+  Kickstart IP (static): 192.168.105.10
 
   Quick start inside the VM:
-    cd ~/src/tynet-img
+    cd /Users/ty/src/tynet-img
     sudo ./configure-tftp
-    sudo ./serve-img /srv/tftpboot/testnode 192.168.105.0/24
+    sudo ./serve-img /srv/tftpboot/testnode 192.168.105.0/24 192.168.105.10
     go run ./cmd/serve-cloud-init &
   -----------------------------------------------------------------------

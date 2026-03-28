@@ -41,16 +41,13 @@ message: |
   Shell in: limactl shell node
 
   Verify services against the kickstart VM (replace <kickstart-ip>):
-    # Find kickstart IP from within kickstart VM:
-    #   limactl shell kickstart -- ip -4 addr show | grep inet
-
     # TFTP
-    tftp <kickstart-ip> -c get testnode/meta-data
+    tftp 192.168.105.10 -c get testnode/vmlinuz
 
     # NFS
-    sudo mount -t nfs <kickstart-ip>:/exports/netboot/<image-name> /mnt
+    sudo mount -t nfs 192.168.105.10:/exports/netboot/<image-name> /mnt
     ls /mnt
 
     # cloud-init HTTP
-    curl http://<kickstart-ip>:8000/testnode/meta-data
+    curl http://192.168.105.10:8000/testnode/meta-data
   -----------------------------------------------------------------------

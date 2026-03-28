@@ -32,7 +32,7 @@ function exports_line {
 function setup-nfs {
   local root_dir=$1
   local node_ip=$2
-  exports_line "${root_dir} ${node_ip}(rw,sync,no_subtree_check,no_root_squash)"
+  exports_line "${root_dir} ${node_ip}(rw,sync,no_subtree_check,no_root_squash,fsid=1)"
 }
 
 ##
@@ -44,6 +44,7 @@ function setup-tftp {
   mkdir -p ${tftp_dir}
   systemctl daemon-reload
   mount ${tftp_dir}/
+  chmod -R a+r ${tftp_dir}
 }
 
 ##
@@ -59,10 +60,11 @@ function load {
 function main {
   local tftp_dir=${1:-"/srv/tftpboot/12345678"}
   local node_ip=${2:-"10.0.10.0/24"}
+  local kickstart_ip=${3:-"10.0.10.13"}
   local serial=$(basename ${tftp_dir})
 
   local root_dir
-  read root_dir <<< $(./customize-img 10.0.10.13 ${serial})
+  read root_dir <<< $(./customize-img ${kickstart_ip} ${serial})
   local boot_dir=${root_dir}/boot
 
   setup-nfs ${root_dir} ${node_ip}
