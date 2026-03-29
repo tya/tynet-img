@@ -1,0 +1,9 @@
+---
+certbot_domains:
+  - "tynet.us"
+  - "*.tynet.us"
+certbot_email: "ty.alexander@gmail.com"
+certbot_propagation_seconds: 900
+# Set these via ansible-vault or --extra-vars:
+# godaddy_api_key: ""
+# godaddy_api_secret: ""

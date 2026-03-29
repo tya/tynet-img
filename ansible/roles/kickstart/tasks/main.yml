@@ -3,6 +3,24 @@
 # Replaces the configure-tftp shell script.
 # Per-node NFS export entries are still managed by serve-img.
 
+- name: Create ty user
+  user:
+    name: ty
+    groups: adm,sudo
+    shell: /bin/bash
+    create_home: yes
+
+- name: Set ty user authorized SSH key
+  authorized_key:
+    user: ty
+    key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG"
+
+- name: Grant ty passwordless sudo
+  copy:
+    dest: /etc/sudoers.d/ty
+    content: "ty ALL=(ALL) NOPASSWD:ALL\n"
+    mode: '0440'
+
 - name: Install kickstart packages
   apt:
     name:
@@ -16,6 +34,7 @@
       - rpcbind
       - make
       - golang-go
+      - git
     state: present
     update_cache: yes
 
@@ -69,6 +88,14 @@
     name: tftpd-hpa
     enabled: yes
     state: started
+
+- name: Clone tynet-img repo
+  git:
+    repo: https://github.com/tya/tynet-img.git
+    dest: "{{ repo_dir }}"
+    version: main
+    update: yes
+  become: no
 
 - name: Build serve-cloud-init binary
   command:

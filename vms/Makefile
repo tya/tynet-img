@@ -16,7 +16,7 @@ start:
 	limactl start node.yaml
 
 provision:
-	cd .. && ansible-playbook -i ansible/inventory-vm.ini ansible/playbooks/kickstart.yml
+	cd ../ansible && ansible-playbook -i inventory-vm.ini playbooks/kickstart.yml
 
 stop:
 	limactl stop kickstart || true

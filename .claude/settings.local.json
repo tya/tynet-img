@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(limactl shell:*)"
+      "Bash(limactl shell:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

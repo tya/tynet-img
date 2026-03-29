@@ -1,0 +1,67 @@
+---
+- name: Install Docker
+  apt:
+    name: docker.io
+    state: present
+    update_cache: yes
+
+- name: Enable and start Docker
+  service:
+    name: docker
+    enabled: yes
+    state: started
+
+- name: Create credentials directory
+  file:
+    path: /etc/letsencrypt/godaddy
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Write GoDaddy credentials
+  template:
+    src: godaddy.ini.j2
+    dest: /etc/letsencrypt/godaddy/godaddy.ini
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Obtain certificate
+  command: >
+    docker run --rm
+    --entrypoint certbot
+    -v /etc/letsencrypt:/etc/letsencrypt
+    -v /etc/letsencrypt/godaddy:/secrets
+    miigotu/certbot-dns-godaddy certonly
+    --authenticator dns-godaddy
+    --dns-godaddy-credentials /secrets/godaddy.ini
+    --dns-godaddy-propagation-seconds {{ certbot_propagation_seconds }}
+    --non-interactive --agree-tos --keep-until-expiring
+    --email {{ certbot_email }}
+    {% for domain in certbot_domains %}-d '{{ domain }}' {% endfor %}
+  register: certbot_result
+  changed_when: "'no action taken' not in certbot_result.stdout"
+
+- name: Install certbot renewal systemd service
+  template:
+    src: certbot-renew.service.j2
+    dest: /etc/systemd/system/certbot-renew.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Install certbot renewal systemd timer
+  template:
+    src: certbot-renew.timer.j2
+    dest: /etc/systemd/system/certbot-renew.timer
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Enable and start certbot renewal timer
+  systemd:
+    name: certbot-renew.timer
+    enabled: yes
+    state: started
+    daemon_reload: yes

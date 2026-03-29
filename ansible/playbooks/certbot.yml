@@ -1,0 +1,10 @@
+---
+# Install certbot with GoDaddy DNS plugin on the kickstart host.
+#
+# Usage:
+#   make provision-certbot   # reads credentials from 1Password via op CLI
+
+- hosts: kickstart
+  become: yes
+  roles:
+    - certbot
