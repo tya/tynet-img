@@ -1,9 +1,18 @@
 #!/bin/sh
-# initramfs init-bottom hook: per-node overlayfs with NFS-backed upper layer.
+# initramfs init-bottom hook: per-node overlayfs with tmpfs upper layer.
 #
-# Reads overlay_host= from the kernel cmdline, mounts
-# <kickstart>:/exports/overlay/<hostname> as the writable upper layer, and
-# overlays it on top of the read-only NFS root.
+# Linux kernel 6.x requires RENAME_WHITEOUT support on the overlayfs upper
+# layer. NFS does not provide this, so tmpfs is used as the upper layer
+# (RAM-backed). On boot, any previously saved state is copied from the
+# per-node NFS overlay share into the tmpfs upper, restoring the last known
+# state. Writes during runtime go to tmpfs and are synced back to NFS by the
+# overlayroot-nfs-sync shutdown service.
+#
+# Reads overlay_host= from the kernel cmdline, then:
+#   1. Mounts <kickstart>:/exports/overlay/<hostname> as the NFS state store
+#   2. Creates a tmpfs upper layer
+#   3. Copies saved state from NFS upper/ into tmpfs upper/ (state restore)
+#   4. Mounts overlayfs: lower=NFS root, upper=tmpfs
 #
 # Installed by customize-img into:
 #   /etc/initramfs-tools/scripts/init-bottom/overlayroot-nfs
@@ -29,15 +38,26 @@ fi
 
 log_begin_msg "overlayroot-nfs: setting up overlay for ${OVERLAY_HOST}"
 
-# Mount per-node NFS overlay share
-OVERLAY_NFS="/run/overlayroot"
-mkdir -p "${OVERLAY_NFS}"
+# Mount per-node NFS state store (read the saved upper layer from here)
+NFS_STATE="/run/overlayroot-nfs"
+mkdir -p "${NFS_STATE}"
 if ! mount -t nfs -o rw,nolock,vers=3 \
-        "${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}" "${OVERLAY_NFS}"; then
-    log_failure_msg "overlayroot-nfs: failed to mount ${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}"
+        "${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}" "${NFS_STATE}"; then
+    log_failure_msg "overlayroot-nfs: failed to mount NFS state store"
     exit 0
 fi
-mkdir -p "${OVERLAY_NFS}/upper" "${OVERLAY_NFS}/work"
+
+# Create tmpfs upper layer (kernel 6.x requires RENAME_WHITEOUT on upper;
+# NFS does not support it — tmpfs does)
+TMPFS_UPPER="/run/overlayroot-upper"
+mkdir -p "${TMPFS_UPPER}"
+mount -t tmpfs tmpfs "${TMPFS_UPPER}"
+mkdir -p "${TMPFS_UPPER}/upper" "${TMPFS_UPPER}/work"
+
+# Restore saved state from NFS into the tmpfs upper layer
+if [ -d "${NFS_STATE}/upper" ] && [ "$(ls -A ${NFS_STATE}/upper 2>/dev/null)" ]; then
+    cp -a "${NFS_STATE}/upper/." "${TMPFS_UPPER}/upper/"
+fi
 
 # Bind-mount the current NFS root as the read-only lower layer
 LOWER="/run/overlayroot-lower"
@@ -47,19 +67,22 @@ mount --bind -o remount,ro "${LOWER}"
 
 # Mount overlayfs at rootmnt
 if ! mount -t overlay overlay \
-        -o lowerdir="${LOWER}",upperdir="${OVERLAY_NFS}/upper",workdir="${OVERLAY_NFS}/work" \
+        -o lowerdir="${LOWER}",upperdir="${TMPFS_UPPER}/upper",workdir="${TMPFS_UPPER}/work" \
         "${rootmnt}"; then
     log_failure_msg "overlayroot-nfs: overlay mount failed, falling back to plain NFS root"
+    umount "${TMPFS_UPPER}"
     umount "${LOWER}"
-    umount "${OVERLAY_NFS}"
+    umount "${NFS_STATE}"
     exit 0
 fi
 
-# Move the lower and overlay NFS mounts inside the new root so they
-# remain accessible (and referenced) after pivot_root.
+# Move all sub-mounts inside the new root so they remain accessible after pivot_root.
+# The sync service will write tmpfs upper back to NFS_STATE on shutdown.
 mkdir -p "${rootmnt}/run/overlayroot-lower"
-mkdir -p "${rootmnt}/run/overlayroot"
+mkdir -p "${rootmnt}/run/overlayroot-upper"
+mkdir -p "${rootmnt}/run/overlayroot-nfs"
 mount --move "${LOWER}"       "${rootmnt}/run/overlayroot-lower"
-mount --move "${OVERLAY_NFS}" "${rootmnt}/run/overlayroot"
+mount --move "${TMPFS_UPPER}" "${rootmnt}/run/overlayroot-upper"
+mount --move "${NFS_STATE}"   "${rootmnt}/run/overlayroot-nfs"
 
 log_end_msg

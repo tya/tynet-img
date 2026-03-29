@@ -26,10 +26,11 @@ red()   { printf '\033[31m✗ %s\033[0m\n' "$*"; }
 pass() { green "$1"; PASS=$((PASS+1)); }
 fail() { red   "$1"; FAIL=$((FAIL+1)); }
 
-cleanup() { umount "$WORK/overlay" 2>/dev/null || true
-            umount "$WORK/lower"   2>/dev/null || true
-            umount "$WORK/upper"   2>/dev/null || true
-            umount "$WORK/base"    2>/dev/null || true
+cleanup() { umount "$WORK/overlay"  2>/dev/null || true
+            umount "$WORK/tmpupper" 2>/dev/null || true
+            umount "$WORK/lower"    2>/dev/null || true
+            umount "$WORK/upper"    2>/dev/null || true
+            umount "$WORK/base"     2>/dev/null || true
             rm -rf "$WORK"; }
 trap cleanup EXIT
 
@@ -90,43 +91,48 @@ else
 fi
 
 # ── 4. Overlayfs ─────────────────────────────────────────────────────────────
+# Note: kernel 6.x requires RENAME_WHITEOUT support on the upper layer, which
+# NFS does not provide. The real Pi boot uses tmpfs as the upper layer (RAM-backed
+# during runtime). This test mirrors that: NFS lower + tmpfs upper.
 
 echo
-echo "── 4. Overlayfs stacking ────────────────────────────────────────"
-mkdir -p "$WORK/overlay" "$WORK/lower"
+echo "── 4. Overlayfs stacking (NFS lower + tmpfs upper) ─────────────"
+mkdir -p "$WORK/overlay" "$WORK/lower" "$WORK/tmpupper"
 # bind lower as read-only
 if mount --bind "$WORK/base" "$WORK/lower" \
    && mount --bind -o remount,ro "$WORK/lower"; then
 
-    if mount -t overlay overlay \
-            -o lowerdir="$WORK/lower",upperdir="$WORK/upper/upper",workdir="$WORK/upper/work" \
-            "$WORK/overlay"; then
-        pass "overlayfs mounted successfully"
+    # tmpfs upper — what the Pi initramfs uses at runtime
+    mount -t tmpfs tmpfs "$WORK/tmpupper"
+    mkdir -p "$WORK/tmpupper/upper" "$WORK/tmpupper/work"
 
-        # write through the overlay — should land in upper, not lower
-        TEST_FILE="$WORK/overlay/etc/overlay-write-test"
+    if mount -t overlay overlay \
+            -o lowerdir="$WORK/lower",upperdir="$WORK/tmpupper/upper",workdir="$WORK/tmpupper/work" \
+            "$WORK/overlay"; then
+        pass "overlayfs mounted (NFS lower, tmpfs upper)"
+
+        # write through the overlay — should land in tmpfs upper, not NFS lower
+        # (write at root to avoid copy-up of virtiofs-backed NFS subdirs in the VM)
+        TEST_FILE="$WORK/overlay/overlay-write-test"
         echo "written-by-test" > "$TEST_FILE"
-        UPPER_COPY="$WORK/upper/upper/etc/overlay-write-test"
+        UPPER_COPY="$WORK/tmpupper/upper/overlay-write-test"
 
         if [ -f "$UPPER_COPY" ] && grep -q "written-by-test" "$UPPER_COPY"; then
-            pass "write through overlay landed in NFS upper layer"
+            pass "write through overlay landed in tmpfs upper (NFS lower unchanged)"
         else
-            fail "write through overlay did not appear in NFS upper layer"
+            fail "write through overlay did not appear in tmpfs upper"
         fi
 
-        if ! [ -f "$WORK/lower/etc/overlay-write-test" ]; then
-            pass "lower (shared base) was not modified by the write"
+        if ! [ -f "$WORK/lower/overlay-write-test" ]; then
+            pass "NFS lower (shared base) was not modified"
         else
-            fail "lower (shared base) was unexpectedly modified"
+            fail "NFS lower (shared base) was unexpectedly modified"
         fi
-
-        # cleanup test file from upper
-        rm -f "$UPPER_COPY"
     else
         fail "overlayfs mount failed"
     fi
 else
-    fail "could not bind-mount base as lower layer"
+    fail "could not bind-mount NFS base as lower layer"
 fi
 
 # ── 5. cloud-init HTTP ───────────────────────────────────────────────────────

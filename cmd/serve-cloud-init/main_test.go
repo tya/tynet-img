@@ -40,7 +40,7 @@ func TestServeCloudInit(t *testing.T) {
 			name:     "pi2 user-data ssh key",
 			path:     "/244634d3/user-data",
 			wantCode: http.StatusOK,
-			wantBody: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEA9fmxTmPKwxfGw4WJtnJhGI+S1LxTe41sR3rKnZ1LC",
+			wantBody: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG",
 		},
 		{
 			name:     "pi2 user-data microk8s",
@@ -76,7 +76,7 @@ func TestServeCloudInit(t *testing.T) {
 			name:     "pi3 user-data ssh key",
 			path:     "/a43386be/user-data",
 			wantCode: http.StatusOK,
-			wantBody: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEA9fmxTmPKwxfGw4WJtnJhGI+S1LxTe41sR3rKnZ1LC",
+			wantBody: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG",
 		},
 		{
 			name:     "pi3 user-data microk8s",
@@ -106,7 +106,7 @@ func TestServeCloudInit(t *testing.T) {
 			name:     "testnode user-data ssh key",
 			path:     "/testnode/user-data",
 			wantCode: http.StatusOK,
-			wantBody: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEA9fmxTmPKwxfGw4WJtnJhGI+S1LxTe41sR3rKnZ1LC",
+			wantBody: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG",
 		},
 		{
 			name:     "unknown serial",

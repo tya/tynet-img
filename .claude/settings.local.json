@@ -3,7 +3,9 @@
     "allow": [
       "Bash(limactl shell:*)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(make start:*)",
+      "Bash(make provision:*)"
     ]
   }
 }

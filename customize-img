@@ -41,13 +41,48 @@ function customize_boot {
 
 ##
 # install_overlay_hook - inject overlayroot-nfs into the image's initramfs
+# and install the overlayroot-nfs-sync shutdown service
 function install_overlay_hook {
   local root_dir=${1}
+  local script_dir=$(dirname $0)
   local hook_dst=${root_dir}/etc/initramfs-tools/scripts/init-bottom/overlayroot-nfs
 
   mkdir -p $(dirname ${hook_dst})
-  cp $(dirname $0)/overlayroot-nfs ${hook_dst}
+  cp ${script_dir}/overlayroot-nfs ${hook_dst}
   chmod +x ${hook_dst}
+
+  # Shutdown sync service: copies tmpfs upper back to NFS state store on reboot/shutdown
+  local svc_dst=${root_dir}/etc/systemd/system/overlayroot-nfs-sync.service
+  cat > ${svc_dst} << 'EOF'
+[Unit]
+Description=Sync overlay upper layer back to NFS state store
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target
+Requires=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=/usr/local/sbin/overlayroot-nfs-sync
+
+[Install]
+WantedBy=halt.target reboot.target shutdown.target
+EOF
+
+  cp ${script_dir}/overlayroot-nfs-sync ${root_dir}/usr/local/sbin/overlayroot-nfs-sync
+  chmod +x ${root_dir}/usr/local/sbin/overlayroot-nfs-sync
+
+  # Enable the service
+  mkdir -p ${root_dir}/etc/systemd/system/halt.target.wants
+  mkdir -p ${root_dir}/etc/systemd/system/reboot.target.wants
+  mkdir -p ${root_dir}/etc/systemd/system/shutdown.target.wants
+  ln -sf /etc/systemd/system/overlayroot-nfs-sync.service \
+    ${root_dir}/etc/systemd/system/halt.target.wants/overlayroot-nfs-sync.service
+  ln -sf /etc/systemd/system/overlayroot-nfs-sync.service \
+    ${root_dir}/etc/systemd/system/reboot.target.wants/overlayroot-nfs-sync.service
+  ln -sf /etc/systemd/system/overlayroot-nfs-sync.service \
+    ${root_dir}/etc/systemd/system/shutdown.target.wants/overlayroot-nfs-sync.service
 }
 
 ##
@@ -57,28 +92,34 @@ function rebuild_initramfs {
   local host_arch=$(uname -m)
   local qemu_bin=/usr/bin/qemu-aarch64-static
 
+  # Cleanup handler — runs even if chroot fails
+  local cleanup_done=0
+  _rebuild_cleanup() {
+    [ "${cleanup_done}" -eq 1 ] && return
+    cleanup_done=1
+    umount "${root_dir}/dev/pts" 2>/dev/null || true
+    umount "${root_dir}/dev"     2>/dev/null || true
+    umount "${root_dir}/sys"     2>/dev/null || true
+    umount "${root_dir}/proc"    2>/dev/null || true
+    [ "${host_arch}" != "aarch64" ] && rm -f "${root_dir}/usr/bin/qemu-aarch64-static" || true
+  }
+  trap _rebuild_cleanup RETURN
+
   # Bind filesystems needed for chroot
-  mount -t proc  proc    ${root_dir}/proc
-  mount -t sysfs sysfs   ${root_dir}/sys
-  mount --bind   /dev    ${root_dir}/dev
-  mount --bind   /dev/pts ${root_dir}/dev/pts
+  mount -t proc  proc     "${root_dir}/proc"
+  mount -t sysfs sysfs    "${root_dir}/sys"
+  mount --bind   /dev     "${root_dir}/dev"
+  mount --bind   /dev/pts "${root_dir}/dev/pts"
 
   # Cross-arch: copy qemu static binary for aarch64
   if [ "${host_arch}" != "aarch64" ]; then
     if [ ! -f ${qemu_bin} ]; then
       apt-get install -y qemu-user-static > /dev/null
     fi
-    cp ${qemu_bin} ${root_dir}/usr/bin/
+    cp ${qemu_bin} "${root_dir}/usr/bin/"
   fi
 
-  chroot ${root_dir} update-initramfs -u -k all
-
-  # Cleanup
-  umount ${root_dir}/dev/pts
-  umount ${root_dir}/dev
-  umount ${root_dir}/sys
-  umount ${root_dir}/proc
-  [ "${host_arch}" != "aarch64" ] && rm -f ${root_dir}/usr/bin/qemu-aarch64-static || true
+  chroot "${root_dir}" update-initramfs -u -k all
 }
 
 ##

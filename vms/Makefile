@@ -20,7 +20,7 @@ provision:
 	cd ../ansible && ansible-playbook -i inventory-vm.ini playbooks/kickstart.yml
 
 test:
-	limactl shell node -- sudo bash /Users/ty/src/tynet-img/vms/test.sh
+	limactl shell node -- sudo bash -s < test.sh
 
 stop:
 	limactl stop kickstart || true

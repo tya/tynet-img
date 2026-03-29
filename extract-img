@@ -7,7 +7,7 @@ set -Eeuo pipefail
 ##
 # usage
 function usage {
-  echo Usage: extact-img [URL] [DOWNLOAD_DIR]
+  echo Usage: extract-img [URL] [DOWNLOAD_DIR]
 }
 
 # download-img

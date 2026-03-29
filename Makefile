@@ -3,7 +3,7 @@ CMD         = ./cmd/serve-cloud-init
 BASE_IMG    = /exports/netboot/ubuntu-26.04
 OVERLAY_DIR = /exports/overlay
 
-.PHONY: build build-linux test clean provision-kickstart provision-certbot \
+.PHONY: build build-linux test clean provision-kickstart \
         update-base wipe-overlay-% wipe-all-overlays reboot-nodes
 
 build:
@@ -21,10 +21,6 @@ clean:
 provision-kickstart:
 	cd ansible && ansible-playbook playbooks/kickstart.yml
 
-provision-certbot:
-	cd ansible && ansible-playbook playbooks/certbot.yml \
-		-e godaddy_api_key=$$(op read "op://Private/OTE Dev Godaddy Key/username") \
-		-e godaddy_api_secret=$$(op read "op://Private/OTE Dev Godaddy Key/password")
 
 # Update the shared base image with security patches.
 # Run wipe-all-overlays + reboot nodes afterward so no upper-layer shadows linger.

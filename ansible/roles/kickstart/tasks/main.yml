@@ -88,6 +88,12 @@
     enabled: yes
     state: started
 
+- name: Check if tynet-img repo already exists
+  stat:
+    path: "{{ repo_dir }}/.git"
+  register: repo_git
+  become: no
+
 - name: Clone tynet-img repo
   git:
     repo: https://github.com/tya/tynet-img.git
@@ -95,6 +101,7 @@
     version: main
     update: yes
   become: no
+  when: not repo_git.stat.exists
 
 - name: Build serve-cloud-init binary
   command:
@@ -182,6 +189,15 @@
   loop_control:
     loop_var: node
   when: base_boot.stat.exists
+  notify: restart tftpd-hpa
+
+- name: Make boot files world-readable for tftpd
+  file:
+    path: /exports/netboot/ubuntu-26.04/boot
+    recurse: yes
+    mode: a+r
+  when: base_boot.stat.exists
+  notify: restart tftpd-hpa
 
 - name: Install update-base systemd service
   template:

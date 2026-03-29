@@ -1,0 +1,37 @@
+#!/bin/sh
+# Shutdown service: sync tmpfs upper layer back to the per-node NFS state store.
+#
+# On shutdown, the overlayfs upper (RAM-backed tmpfs) contains all writes made
+# during runtime. This script copies that state back to the NFS overlay share so
+# it can be restored on the next boot by overlayroot-nfs.
+#
+# Installed by customize-img as:
+#   /etc/systemd/system/overlayroot-nfs-sync.service
+#
+# Paths must match what overlayroot-nfs sets up:
+#   /run/overlayroot-upper  — tmpfs with upper/ and work/ subdirs
+#   /run/overlayroot-nfs    — NFS per-node state store (already mounted)
+
+set -eu
+
+TMPFS_UPPER="/run/overlayroot-upper"
+NFS_STATE="/run/overlayroot-nfs"
+
+if [ ! -d "${TMPFS_UPPER}/upper" ]; then
+    echo "overlayroot-nfs-sync: ${TMPFS_UPPER}/upper not found, nothing to sync" >&2
+    exit 0
+fi
+
+if [ ! -d "${NFS_STATE}" ] || ! mountpoint -q "${NFS_STATE}"; then
+    echo "overlayroot-nfs-sync: NFS state store not mounted at ${NFS_STATE}" >&2
+    exit 1
+fi
+
+echo "overlayroot-nfs-sync: syncing tmpfs upper to NFS state store" >&2
+
+# Clear old state and replace with current tmpfs upper contents
+rm -rf "${NFS_STATE}/upper"
+mkdir -p "${NFS_STATE}/upper"
+cp -a "${TMPFS_UPPER}/upper/." "${NFS_STATE}/upper/"
+
+echo "overlayroot-nfs-sync: done" >&2
