@@ -38,13 +38,17 @@ wipe-overlay-%:
 	sudo mkdir -p $(OVERLAY_DIR)/$*/upper $(OVERLAY_DIR)/$*/work
 
 # Wipe all nodes' overlays at once (run on kickstart server; use before rebooting cluster after update-base).
+# Requires CONFIRM=yes to prevent accidental data loss.
 wipe-all-overlays:
+	@[ "$(CONFIRM)" = "yes" ] || { echo "ERROR: set CONFIRM=yes to wipe all overlays"; exit 1; }
 	@for d in $(OVERLAY_DIR)/*/; do \
 		echo "Wiping $$d"; \
 		sudo rm -rf "$$d/upper" "$$d/work"; \
 		sudo mkdir -p "$$d/upper" "$$d/work"; \
 	done
 
-# Reboot all nodes via Ansible (handles unreachable nodes gracefully).
+# Reboot all nodes via Ansible.
+# Drains each node before rebooting so k8s workloads are evicted gracefully,
+# then uncordons after the node comes back up.
 reboot-nodes:
-	cd ansible && ansible nodes -i inventory.ini -m reboot --become
+	cd ansible && ansible-playbook playbooks/reboot-nodes.yml

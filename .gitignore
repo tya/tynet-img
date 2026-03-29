@@ -1,4 +1,4 @@
-serve-cloud-init
+/serve-cloud-init
 cache/
 exports/
 overlay/

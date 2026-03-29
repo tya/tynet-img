@@ -10,7 +10,7 @@ set -ex
 ################################################################################
 
 function main {
-  local kickstart_ip=${1:-"10.0.10.13"}
+  local kickstart_ip=${1:?"kickstart_ip required"}
   local serial=${2:?"serial required"}
   local hostname=${3:-${serial}}
 

@@ -3,25 +3,25 @@
 # serve-img handles image extraction/customization only; server config lives here.
 
 - name: Create ty user
-  user:
+  ansible.builtin.user:
     name: ty
     groups: adm,sudo
     shell: /bin/bash
-    create_home: yes
+    create_home: true
 
 - name: Set ty user authorized SSH key
-  authorized_key:
+  ansible.posix.authorized_key:
     user: ty
     key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG"
 
 - name: Grant ty passwordless sudo
-  copy:
+  ansible.builtin.copy:
     dest: /etc/sudoers.d/ty
     content: "ty ALL=(ALL) NOPASSWD:ALL\n"
     mode: '0440'
 
 - name: Install kickstart packages
-  apt:
+  ansible.builtin.apt:
     name:
       - kpartx
       - wget
@@ -35,10 +35,10 @@
       - golang-go
       - git
     state: present
-    update_cache: yes
+    update_cache: true
 
 - name: Create TFTP root directory
-  file:
+  ansible.builtin.file:
     path: /srv/tftpboot
     state: directory
     owner: tftp
@@ -46,7 +46,7 @@
     mode: '0755'
 
 - name: Create NFS netboot export directory
-  file:
+  ansible.builtin.file:
     path: /exports/netboot
     state: directory
     owner: root
@@ -54,7 +54,7 @@
     mode: '0755'
 
 - name: Create NFS overlay export directory
-  file:
+  ansible.builtin.file:
     path: /exports/overlay
     state: directory
     owner: root
@@ -62,76 +62,76 @@
     mode: '0755'
 
 - name: Configure tftpd-hpa
-  template:
+  ansible.builtin.template:
     src: tftpd-hpa.j2
     dest: /etc/default/tftpd-hpa
     owner: root
     group: root
     mode: '0644'
-  notify: restart tftpd-hpa
+  notify: Restart tftpd-hpa
 
 - name: Enable and start rpcbind
-  service:
+  ansible.builtin.service:
     name: rpcbind
-    enabled: yes
+    enabled: true
     state: started
 
 - name: Enable and start nfs-server
-  service:
+  ansible.builtin.service:
     name: nfs-server
-    enabled: yes
+    enabled: true
     state: started
 
 - name: Enable and start tftpd-hpa
-  service:
+  ansible.builtin.service:
     name: tftpd-hpa
-    enabled: yes
+    enabled: true
     state: started
 
 - name: Check if tynet-img repo already exists
-  stat:
+  ansible.builtin.stat:
     path: "{{ repo_dir }}/.git"
-  register: repo_git
-  become: no
+  register: kickstart_repo_git
+  become: false
 
 - name: Clone tynet-img repo
-  git:
+  ansible.builtin.git:
     repo: https://github.com/tya/tynet-img.git
     dest: "{{ repo_dir }}"
     version: main
-    update: yes
-  become: no
-  when: not repo_git.stat.exists
+    update: true
+  become: false
+  when: not kickstart_repo_git.stat.exists
 
 - name: Build serve-cloud-init binary
-  command:
+  ansible.builtin.command:
     cmd: make build
     chdir: "{{ repo_dir }}"
-  become: no
+  become: false
   changed_when: false
 
 - name: Install serve-cloud-init systemd service
-  template:
+  ansible.builtin.template:
     src: serve-cloud-init.service.j2
     dest: /etc/systemd/system/serve-cloud-init.service
     owner: root
     group: root
     mode: '0644'
   notify:
-    - reload systemd
-    - restart serve-cloud-init
+    - Reload systemd
+    - Restart serve-cloud-init
 
 - name: Enable and start serve-cloud-init
-  service:
+  ansible.builtin.service:
     name: serve-cloud-init
-    enabled: yes
+    enabled: true
     state: started
 
 # Per-node server-side config — loops over the [nodes] inventory group.
 # host_vars/<node>.yml must define: serial, node_ip, nfs_fsid
 
 - name: Create per-node overlay directories
-  file:
+  ansible.builtin.file:
     path: "/exports/overlay/{{ hostvars[node].inventory_hostname_short }}/{{ subdir }}"
     state: directory
     owner: root
@@ -142,28 +142,17 @@
     node: "{{ item[0] }}"
     subdir: "{{ item[1] }}"
 
-- name: Export read-only NFS root (shared base image)
-  lineinfile:
-    path: /etc/exports
-    line: "/exports/netboot/ubuntu-26.04 {{ hostvars[node].node_ip }}(ro,sync,no_subtree_check,no_root_squash,fsid=1)"
-    create: yes
-  loop: "{{ groups['nodes'] }}"
-  loop_control:
-    loop_var: node
-  notify: reload nfs exports
-
-- name: Export per-node NFS overlay (writable upper layer)
-  lineinfile:
-    path: /etc/exports
-    line: "/exports/overlay/{{ hostvars[node].inventory_hostname_short }} {{ hostvars[node].node_ip }}(rw,sync,no_subtree_check,no_root_squash,fsid={{ hostvars[node].nfs_fsid }})"
-    create: yes
-  loop: "{{ groups['nodes'] }}"
-  loop_control:
-    loop_var: node
-  notify: reload nfs exports
+- name: Write /etc/exports from template
+  ansible.builtin.template:
+    src: exports.j2
+    dest: /etc/exports
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload NFS exports
 
 - name: Create per-node TFTP directories
-  file:
+  ansible.builtin.file:
     path: "/srv/tftpboot/{{ hostvars[node].serial }}"
     state: directory
     owner: tftp
@@ -172,14 +161,15 @@
   loop: "{{ groups['nodes'] }}"
   loop_control:
     loop_var: node
+  when: hostvars[node].serial | default('TODO') != 'TODO'
 
 - name: Check base image boot directory exists
-  stat:
+  ansible.builtin.stat:
     path: /exports/netboot/ubuntu-26.04/boot
-  register: base_boot
+  register: kickstart_base_boot
 
 - name: Bind-mount boot partition into TFTP directory
-  mount:
+  ansible.posix.mount:
     path: "/srv/tftpboot/{{ hostvars[node].serial }}"
     src: /exports/netboot/ubuntu-26.04/boot
     fstype: none
@@ -188,37 +178,37 @@
   loop: "{{ groups['nodes'] }}"
   loop_control:
     loop_var: node
-  when: base_boot.stat.exists
-  notify: restart tftpd-hpa
+  when: kickstart_base_boot.stat.exists
+  notify: Restart tftpd-hpa
 
 - name: Make boot files world-readable for tftpd
-  file:
+  ansible.builtin.file:
     path: /exports/netboot/ubuntu-26.04/boot
-    recurse: yes
+    recurse: true
     mode: a+r
-  when: base_boot.stat.exists
-  notify: restart tftpd-hpa
+  when: kickstart_base_boot.stat.exists
+  notify: Restart tftpd-hpa
 
 - name: Install update-base systemd service
-  template:
+  ansible.builtin.template:
     src: update-base.service.j2
     dest: /etc/systemd/system/update-base.service
     owner: root
     group: root
     mode: '0644'
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Install update-base systemd timer
-  template:
+  ansible.builtin.template:
     src: update-base.timer.j2
     dest: /etc/systemd/system/update-base.timer
     owner: root
     group: root
     mode: '0644'
-  notify: reload systemd
+  notify: Reload systemd
 
 - name: Enable and start update-base timer
-  service:
+  ansible.builtin.service:
     name: update-base.timer
-    enabled: yes
+    enabled: true
     state: started

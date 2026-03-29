@@ -6,7 +6,8 @@
 # Usage:
 #   ansible-playbook ansible/playbooks/kickstart.yml
 
-- hosts: kickstart
-  become: yes
+- name: Configure kickstart host
+  hosts: kickstart
+  become: true
   roles:
     - kickstart

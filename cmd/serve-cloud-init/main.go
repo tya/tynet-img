@@ -9,7 +9,11 @@ import (
 )
 
 func newHandler(dir string) http.Handler {
-	return http.FileServer(http.Dir(dir))
+	fs := http.FileServer(http.Dir(dir))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL.Path)
+		fs.ServeHTTP(w, r)
+	})
 }
 
 func defaultDir() string {

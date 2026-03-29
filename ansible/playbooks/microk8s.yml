@@ -6,8 +6,9 @@
 #   ansible-playbook ansible/playbooks/microk8s.yml --tags status
 #   ansible-playbook ansible/playbooks/microk8s.yml --tags addons
 
-- hosts: nodes
-  become: yes
+- name: MicroK8s cluster operations
+  hosts: nodes
+  become: true
   vars:
     microk8s_channel: "1.32/stable"
     microk8s_addons:
@@ -18,32 +19,32 @@
 
   tasks:
     - name: Check microk8s status
-      command: microk8s status --wait-ready --timeout 30
+      ansible.builtin.command: microk8s status --wait-ready --timeout 30
       register: microk8s_status
       changed_when: false
       tags: status
 
     - name: Show microk8s status
-      debug:
+      ansible.builtin.debug:
         var: microk8s_status.stdout_lines
       tags: status
 
     - name: Enable microk8s addons
-      command: "microk8s enable {{ item }}"
+      ansible.builtin.command: "microk8s enable {{ item }}"
       loop: "{{ microk8s_addons }}"
       register: addon_result
       changed_when: "'Addon ' + item + ' is already enabled' not in addon_result.stdout"
       tags: addons
 
     - name: Get cluster nodes
-      command: microk8s kubectl get nodes -o wide
+      ansible.builtin.command: microk8s kubectl get nodes -o wide
       register: nodes_output
       changed_when: false
-      run_once: true
+      run_once: true  # noqa: run-once
       tags: status
 
     - name: Show cluster nodes
-      debug:
+      ansible.builtin.debug:
         var: nodes_output.stdout_lines
-      run_once: true
+      run_once: true  # noqa: run-once
       tags: status

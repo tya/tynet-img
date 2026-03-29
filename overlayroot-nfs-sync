@@ -27,11 +27,12 @@ if [ ! -d "${NFS_STATE}" ] || ! mountpoint -q "${NFS_STATE}"; then
     exit 1
 fi
 
-echo "overlayroot-nfs-sync: syncing tmpfs upper to NFS state store" >&2
+file_count=$(find "${TMPFS_UPPER}/upper" -mindepth 1 | wc -l | tr -d ' ')
+echo "overlayroot-nfs-sync: syncing ${file_count} files to NFS state store" >&2
 
 # Clear old state and replace with current tmpfs upper contents
 rm -rf "${NFS_STATE}/upper"
 mkdir -p "${NFS_STATE}/upper"
 cp -a "${TMPFS_UPPER}/upper/." "${NFS_STATE}/upper/"
 
-echo "overlayroot-nfs-sync: done" >&2
+echo "overlayroot-nfs-sync: done (${file_count} files synced)" >&2

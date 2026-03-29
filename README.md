@@ -61,7 +61,7 @@ Calls `extract-img`, then modifies the extracted filesystem for netboot:
 - Writes the root directory path to stdout
 
 ```bash
-sudo ./customize-img 10.0.60.10 244634d3 pi2
+sudo ./customize-img 10.0.60.10 244634d3 pi2   # kickstart_ip serial hostname
 ```
 
 ### `serve-img [KICKSTART_IP] [SERIAL] [HOSTNAME]`
@@ -167,7 +167,7 @@ make update-base
 make wipe-overlay-pi2
 
 # Wipe all nodes' overlays (use after update-base before rebooting)
-make wipe-all-overlays
+make wipe-all-overlays CONFIRM=yes
 
 # Reboot all nodes via Ansible
 make reboot-nodes
@@ -176,7 +176,7 @@ make reboot-nodes
 **Typical base image update flow:**
 ```bash
 make update-base        # patch the shared NFS root
-make wipe-all-overlays  # clear per-node upper layers so no stale files shadow updates
+make wipe-all-overlays CONFIRM=yes  # clear per-node upper layers so no stale files shadow updates
 make reboot-nodes       # restart nodes against the updated base
 ```
 
