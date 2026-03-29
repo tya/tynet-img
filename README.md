@@ -4,21 +4,22 @@ Scripts for provisioning Raspberry Pi nodes via network boot (NFS root + TFTP bo
 
 ## How it works
 
-A Pi boots over the network by fetching its kernel and boot files via TFTP, then mounting its root filesystem over NFS. cloud-init runs on first boot and fetches its configuration from an HTTP server on the kickstart host, keyed by the Pi's serial number.
+A Pi boots over the network by fetching its kernel and boot files via TFTP, then mounting its root filesystem over NFS. Each node gets a persistent writable overlay layer over the shared read-only base image. cloud-init runs on first boot and fetches its configuration from an HTTP server on the kickstart host, keyed by the Pi's serial number.
 
 ```
 Pi (power on)
   └── DHCP  → gets TFTP server IP from UniFi (option 66)
-  └── TFTP  → /srv/tftpboot/<serial>/        (boot files + cmdline.txt)
-  └── NFS   → /exports/netboot/ubuntu-26.04/ (root filesystem)
-  └── HTTP  → :8000/<serial>/                (cloud-init user-data + meta-data)
+  └── TFTP  → /srv/tftpboot/<serial>/         (boot files + cmdline.txt)
+  └── NFS   → /exports/netboot/ubuntu-26.04/  (shared read-only root)
+  └── NFS   → /exports/overlay/<hostname>/    (per-node writable overlay)
+  └── HTTP  → :8000/<serial>/                 (cloud-init user-data + meta-data)
 ```
 
-All three are served from the kickstart host (`vpn.tynet.us`, `10.0.60.10`).
+All services are hosted on the kickstart host (`vpn.tynet.us`, `10.0.60.10`).
 
 ## Infrastructure
 
-- **Kickstart host**: `vpn.tynet.us` — Ubuntu 22.10, Raspberry Pi, on VLAN 60 (`10.0.60.10`)
+- **Kickstart host**: `vpn.tynet.us` — Raspberry Pi, on VLAN 60 (`10.0.60.10`)
 - **Pi VLAN**: `10.0.60.0/24`
 - **UniFi Network Boot**: set to `10.0.60.10` on the VLAN 60 network (sets DHCP option 66)
 
@@ -37,40 +38,34 @@ sudo ./extract-img
 sudo ./extract-img https://cdimage.ubuntu.com/.../ubuntu-26.04-...img.xz /exports/netboot/ubuntu-26.04
 ```
 
-### `customize-img [KICKSTART_IP] [SERIAL]`
+### `customize-img [KICKSTART_IP] [SERIAL] [HOSTNAME]`
 Calls `extract-img`, then modifies the extracted filesystem for netboot:
 
-- Writes `cmdline.txt` with NFS root + `ds=nocloud;s=http://<kickstart>:8000/<serial>/` for cloud-init
+- Writes `cmdline.txt` with NFS root (read-only), overlay hostname, and cloud-init URL
 - Sets `/etc/fstab` to mount root over NFS
 - Disables growroot
+- Installs the `overlayroot-nfs` initramfs hook for per-node persistent overlay
 - Writes the root directory path to stdout
 
 ```bash
-sudo ./customize-img 10.0.60.10 244634d3
+sudo ./customize-img 10.0.60.10 244634d3 pi2
 ```
 
-### `serve-img [TFTP_DIR] [NODE_CIDR] [KICKSTART_IP]`
+### `serve-img [TFTP_DIR] [NODE_CIDR] [KICKSTART_IP] [HOSTNAME]`
 Calls `customize-img`, then configures the kickstart host to serve the node:
 
-- Adds an NFS export for the node subnet in `/etc/exports`
+- Adds a read-only NFS export for the base image
+- Creates per-node overlay directories (`/exports/overlay/<hostname>/upper` and `work`) and adds an NFS export for them
 - Bind-mounts the boot directory into the TFTP directory and adds it to `/etc/fstab`
 - Restarts `rpcbind`, `nfs-server`, and `tftpd-hpa`
-- The Pi serial is derived from the basename of `TFTP_DIR`
 
 ```bash
 sudo ./serve-img /srv/tftpboot/244634d3 10.0.60.0/24 10.0.60.10 pi2   # pi2
 sudo ./serve-img /srv/tftpboot/a43386be 10.0.60.0/24 10.0.60.10 pi3   # pi3
 ```
 
-### `configure-tftp`
-One-time setup to install and configure `tftpd-hpa` on the kickstart host.
-
-```bash
-sudo ./configure-tftp
-```
-
 ### `serve-cloud-init [-dir DIR] [-addr ADDR]`
-Go program that serves per-node cloud-init seed data over HTTP on port 8000. Defaults to the `cloud-init/` directory adjacent to the binary.
+Go program that serves per-node cloud-init seed data over HTTP on port 8000. Managed as a systemd service by Ansible; can also be run manually.
 
 ```bash
 ./serve-cloud-init -dir ~/src/tynet-img/cloud-init
@@ -108,50 +103,41 @@ make clean  # remove binary
 
 The binary is written to `./serve-cloud-init`.
 
-## Dependencies
+## Provisioning the kickstart host
 
-The kickstart host requires: `kpartx`, `wget`, `nfs-kernel-server`, `rpcbind`, `tftpd-hpa`, `make`, `golang-go`
+The kickstart host is configured with Ansible from your Mac. This installs all required packages (kpartx, nfs-kernel-server, tftpd-hpa, golang-go, etc.), configures services, and deploys the serve-cloud-init systemd service.
 
-## Provisioning a new node (end-to-end)
-
+**Mac prerequisites:**
 ```bash
-# 1. On kickstart host: one-time TFTP setup
-sudo ./configure-tftp
-
-# 2. Add cloud-init seed data for the node
-#    Create cloud-init/<serial>/meta-data and user-data
-
-# 3. Serve NFS + TFTP boot files for each node (hostname used for overlay layer)
-sudo ./serve-img /srv/tftpboot/<serial> 10.0.60.0/24 10.0.60.10 <hostname>
-
-# 4. Start the cloud-init HTTP server
-./serve-cloud-init -dir ~/src/tynet-img/cloud-init &
-
-# 5. In UniFi: set Network Boot to 10.0.60.10 on the VLAN 60 network
-
-# 6. Power on the Pi — it will netboot and run cloud-init
+brew install ansible
 ```
 
-## Day-2 management with Ansible
+**Provision production (`vpn.tynet.us`):**
+```bash
+make provision-kickstart
+```
 
-After nodes are netbooting, use Ansible for ongoing management from your Mac.
+**Provision the local VM kickstart (see VM test environment below):**
+```bash
+cd vms && make provision
+```
+
+Both use the same Ansible playbook (`ansible/playbooks/kickstart.yml`) with different inventories:
 
 ```
 ansible/
-  inventory.ini             # kickstart + pi1-pi4
+  inventory.ini      # production: vpn.tynet.us + pi1-pi4
+  inventory-vm.ini   # VM test environment: 192.168.105.10
   playbooks/
-    kickstart.yml           # configure vpn.tynet.us (TFTP, NFS, cloud-init service)
-    upgrade.yml             # apt upgrade all nodes
-    microk8s.yml            # microk8s status and addon management
+    kickstart.yml    # configure kickstart host (packages, TFTP, NFS, cloud-init service)
+    upgrade.yml      # apt upgrade all nodes
+    microk8s.yml     # microk8s status and addon management
   roles/
-    kickstart/              # replaces configure-tftp shell script
-    nodes/                  # common node config (hostname, SSH keys)
+    kickstart/       # kickstart host setup
+    nodes/           # common node config (hostname, SSH keys)
 ```
 
 ```bash
-# Set up kickstart host (first time or after changes)
-ansible-playbook ansible/playbooks/kickstart.yml
-
 # Upgrade all nodes
 ansible-playbook ansible/playbooks/upgrade.yml
 
@@ -166,38 +152,59 @@ ansible-playbook ansible/playbooks/microk8s.yml --tags status
 
 | Shell scripts | Ansible |
 |---|---|
-| `extract-img` — download + extract image | Kickstart service config (TFTP, NFS) |
-| `customize-img` — inject overlayfs hook, write cmdline.txt | OS upgrades across nodes |
-| `serve-img` — provision a new node (per-serial) | MicroK8s cluster management |
-| | SSH key rotation |
-| | Reboot management |
+| `extract-img` — download + extract image | Kickstart host packages and services |
+| `customize-img` — overlayfs hook, cmdline.txt | OS upgrades across nodes |
+| `serve-img` — provision a new node (NFS exports, TFTP bind-mount) | MicroK8s cluster management |
+| | SSH key rotation, reboot management |
+
+## Provisioning a new node (end-to-end)
+
+```bash
+# 1. Provision kickstart host (first time or after changes)
+make provision-kickstart
+
+# 2. Add cloud-init seed data for the node
+#    Create cloud-init/<serial>/meta-data and user-data
+
+# 3. On the kickstart host: serve NFS + TFTP boot files for the node
+sudo ./serve-img /srv/tftpboot/<serial> 10.0.60.0/24 10.0.60.10 <hostname>
+
+# 4. In UniFi: set Network Boot to 10.0.60.10 on the VLAN 60 network
+
+# 5. Power on the Pi — it will netboot and run cloud-init
+```
 
 ## Local VM test environment
 
-A Lima-based two-VM environment for testing the full netboot stack on Apple Silicon without real hardware. See `vms/`.
+A Lima-based two-VM environment for testing the full netboot stack on Apple Silicon without real hardware. Uses the same Ansible playbook as production. See `vms/`.
+
+**Mac prerequisites:**
+```bash
+brew install lima ansible
+brew install socket_vmnet   # for VM-to-VM networking
+```
 
 ```bash
 cd vms
 make start      # start both VMs
+make provision  # run Ansible against kickstart VM (same playbook as production)
 make kickstart  # shell into kickstart VM
 make node       # shell into node VM
 make stop       # stop both VMs
 make clean      # delete both VMs
 ```
 
-The kickstart VM is fixed at `192.168.105.10`. Inside the kickstart VM:
+The kickstart VM is fixed at `192.168.105.10`. After `make provision`, run inside the kickstart VM:
 
 ```bash
 cd /Users/ty/src/tynet-img
-sudo ./configure-tftp
-sudo ./serve-img /srv/tftpboot/testnode 192.168.105.0/24 192.168.105.10
-./serve-cloud-init -dir /Users/ty/src/tynet-img/cloud-init &
+sudo ./serve-img /srv/tftpboot/testnode 192.168.105.0/24 192.168.105.10 testnode
 ```
 
 From the node VM, verify each service:
 
 ```bash
-tftp 192.168.105.10 -c get testnode/vmlinuz        # TFTP
+tftp 192.168.105.10 -c get testnode/vmlinuz           # TFTP
 sudo mount -t nfs 192.168.105.10:/exports/netboot/ubuntu-26.04 /mnt  # NFS
-curl http://192.168.105.10:8000/testnode/meta-data  # cloud-init HTTP
+curl http://192.168.105.10:8000/testnode/meta-data    # cloud-init HTTP
 ```

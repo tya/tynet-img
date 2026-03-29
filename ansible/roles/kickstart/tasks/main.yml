@@ -6,6 +6,11 @@
 - name: Install kickstart packages
   apt:
     name:
+      - kpartx
+      - wget
+      - xz-utils
+      - rsync
+      - tftp-hpa
       - tftpd-hpa
       - nfs-kernel-server
       - rpcbind
@@ -68,7 +73,7 @@
 - name: Build serve-cloud-init binary
   command:
     cmd: make build
-    chdir: /home/ubuntu/src/tynet-img
+    chdir: "{{ repo_dir }}"
   become: no
   changed_when: false
 

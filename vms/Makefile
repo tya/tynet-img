@@ -1,9 +1,10 @@
 .DEFAULT_GOAL := help
-.PHONY: help start stop kickstart node clean status
+.PHONY: help start stop kickstart node clean status provision
 
 help:
 	@echo "Targets:"
 	@echo "  start      start both kickstart and node VMs"
+	@echo "  provision  run Ansible against the kickstart VM"
 	@echo "  stop       stop both VMs"
 	@echo "  kickstart  shell into kickstart VM"
 	@echo "  node       shell into node VM"
@@ -13,6 +14,9 @@ help:
 start:
 	limactl start kickstart.yaml
 	limactl start node.yaml
+
+provision:
+	cd .. && ansible-playbook -i ansible/inventory-vm.ini ansible/playbooks/kickstart.yml
 
 stop:
 	limactl stop kickstart || true

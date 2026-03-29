@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/src/tynet-img
-ExecStart=/home/ubuntu/src/tynet-img/serve-cloud-init -dir /home/ubuntu/src/tynet-img/cloud-init
+User={{ ansible_user }}
+WorkingDirectory={{ repo_dir }}
+ExecStart={{ repo_dir }}/serve-cloud-init -dir {{ repo_dir }}/cloud-init
 Restart=always
 RestartSec=5
 

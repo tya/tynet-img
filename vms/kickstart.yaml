@@ -44,27 +44,8 @@ provision:
     script: |
       #!/bin/bash
       set -euo pipefail
-      export DEBIAN_FRONTEND=noninteractive
-      apt-get update -q
-      apt-get install -y -q \
-        kpartx \
-        nfs-kernel-server \
-        rpcbind \
-        tftpd-hpa \
-        tftp-hpa \
-        wget \
-        xz-utils \
-        rsync \
-        make \
-        golang-go
-      mkdir -p /srv/tftpboot
-      # Symlink repo for convenience: /tynet-img -> ~/src/tynet-img
-      REPO=$(find /root /home -maxdepth 4 -name "CLAUDE.md" -path "*/tynet-img/*" 2>/dev/null | head -1 | xargs dirname 2>/dev/null || true)
-      if [ -n "$REPO" ] && [ ! -e /tynet-img ]; then
-        ln -s "$REPO" /tynet-img
-      fi
-      systemctl enable rpcbind nfs-server tftpd-hpa || true
-      # Assign static IP on the shared network interface (lima0)
+      # Assign static IP on the shared network interface (lima0).
+      # Ansible handles all package installation and service setup.
       printf '%s\n' \
         'network:' \
         '  version: 2' \
@@ -82,14 +63,13 @@ message: |
   -----------------------------------------------------------------------
   kickstart VM is ready.
 
-  Shell in: limactl shell kickstart
-  Repo is at ~/src/tynet-img (and symlinked to /tynet-img if found).
+  Shell in:  limactl shell kickstart  (or: cd vms && make kickstart)
+  Provision: cd vms && make provision
 
   Kickstart IP (static): 192.168.105.10
 
-  Quick start inside the VM:
-    cd /Users/ty/src/tynet-img
-    sudo ./configure-tftp
-    sudo ./serve-img /srv/tftpboot/testnode 192.168.105.0/24 192.168.105.10
-    go run ./cmd/serve-cloud-init &
+  After provisioning, test from the node VM:
+    tftp 192.168.105.10 -c get testnode/vmlinuz
+    sudo mount -t nfs 192.168.105.10:/exports/netboot/ubuntu-26.04 /mnt
+    curl http://192.168.105.10:8000/testnode/meta-data
   -----------------------------------------------------------------------
