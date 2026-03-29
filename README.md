@@ -43,7 +43,6 @@ Calls `extract-img`, then modifies the extracted filesystem for netboot:
 - Writes `cmdline.txt` with NFS root + `ds=nocloud;s=http://<kickstart>:8000/<serial>/` for cloud-init
 - Sets `/etc/fstab` to mount root over NFS
 - Disables growroot
-- Refreshes RPi firmware (`start4.elf`, `fixup4.dat`) from the rpi-firmware GitHub repo
 - Writes the root directory path to stdout
 
 ```bash
