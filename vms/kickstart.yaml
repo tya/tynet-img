@@ -32,6 +32,9 @@ mounts:
   - location: "~/src/tynet-img/exports"
     mountPoint: /exports/netboot
     writable: true
+  - location: "~/src/tynet-img/overlay"
+    mountPoint: /exports/overlay
+    writable: true
 
 networks:
   - lima: shared

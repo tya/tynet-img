@@ -1,0 +1,65 @@
+#!/bin/sh
+# initramfs init-bottom hook: per-node overlayfs with NFS-backed upper layer.
+#
+# Reads overlay_host= from the kernel cmdline, mounts
+# <kickstart>:/exports/overlay/<hostname> as the writable upper layer, and
+# overlays it on top of the read-only NFS root.
+#
+# Installed by customize-img into:
+#   /etc/initramfs-tools/scripts/init-bottom/overlayroot-nfs
+
+PREREQS=""
+prereqs() { echo "$PREREQS"; }
+case $1 in prereqs) prereqs; exit 0;; esac
+
+. /scripts/functions
+
+cmdline_val() {
+    cat /proc/cmdline | tr ' ' '\n' | grep "^${1}=" | cut -d= -f2- | head -1
+}
+
+OVERLAY_HOST=$(cmdline_val overlay_host)
+[ -z "${OVERLAY_HOST}" ] && exit 0
+
+KICKSTART_IP=$(cmdline_val nfsroot | cut -d: -f1)
+if [ -z "${KICKSTART_IP}" ]; then
+    log_failure_msg "overlayroot-nfs: cannot determine kickstart IP from nfsroot="
+    exit 0
+fi
+
+log_begin_msg "overlayroot-nfs: setting up overlay for ${OVERLAY_HOST}"
+
+# Mount per-node NFS overlay share
+OVERLAY_NFS="/run/overlayroot"
+mkdir -p "${OVERLAY_NFS}"
+if ! mount -t nfs -o rw,nolock,vers=3 \
+        "${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}" "${OVERLAY_NFS}"; then
+    log_failure_msg "overlayroot-nfs: failed to mount ${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}"
+    exit 0
+fi
+mkdir -p "${OVERLAY_NFS}/upper" "${OVERLAY_NFS}/work"
+
+# Bind-mount the current NFS root as the read-only lower layer
+LOWER="/run/overlayroot-lower"
+mkdir -p "${LOWER}"
+mount --bind "${rootmnt}" "${LOWER}"
+mount --bind -o remount,ro "${LOWER}"
+
+# Mount overlayfs at rootmnt
+if ! mount -t overlay overlay \
+        -o lowerdir="${LOWER}",upperdir="${OVERLAY_NFS}/upper",workdir="${OVERLAY_NFS}/work" \
+        "${rootmnt}"; then
+    log_failure_msg "overlayroot-nfs: overlay mount failed, falling back to plain NFS root"
+    umount "${LOWER}"
+    umount "${OVERLAY_NFS}"
+    exit 0
+fi
+
+# Move the lower and overlay NFS mounts inside the new root so they
+# remain accessible (and referenced) after pivot_root.
+mkdir -p "${rootmnt}/run/overlayroot-lower"
+mkdir -p "${rootmnt}/run/overlayroot"
+mount --move "${LOWER}"       "${rootmnt}/run/overlayroot-lower"
+mount --move "${OVERLAY_NFS}" "${rootmnt}/run/overlayroot"
+
+log_end_msg

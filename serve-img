@@ -28,11 +28,23 @@ function exports_line {
 ################################################################################
 # functions
 ################################################################################
-# setup nfs
+# setup nfs for root filesystem (read-only shared base)
 function setup-nfs {
   local root_dir=$1
   local node_ip=$2
-  exports_line "${root_dir} ${node_ip}(rw,sync,no_subtree_check,no_root_squash,fsid=1)"
+  exports_line "${root_dir} ${node_ip}(ro,sync,no_subtree_check,no_root_squash,fsid=1)"
+}
+
+##
+# setup nfs for per-node overlay (writable upper layer)
+function setup-overlay-nfs {
+  local hostname=$1
+  local node_ip=$2
+  local overlay_dir=/exports/overlay/${hostname}
+  local fsid=$(echo "${hostname}" | cksum | awk '{print ($1 % 65533) + 2}')
+
+  mkdir -p ${overlay_dir}/upper ${overlay_dir}/work
+  exports_line "${overlay_dir} ${node_ip}(rw,sync,no_subtree_check,no_root_squash,fsid=${fsid})"
 }
 
 ##
@@ -61,18 +73,21 @@ function main {
   local tftp_dir=${1:-"/srv/tftpboot/12345678"}
   local node_ip=${2:-"10.0.10.0/24"}
   local kickstart_ip=${3:-"10.0.10.13"}
+  local hostname=${4:-$(basename ${tftp_dir})}
   local serial=$(basename ${tftp_dir})
 
   local root_dir
-  read root_dir <<< $(./customize-img ${kickstart_ip} ${serial})
+  read root_dir <<< $(./customize-img ${kickstart_ip} ${serial} ${hostname})
   local boot_dir=${root_dir}/boot
 
   setup-nfs ${root_dir} ${node_ip}
+  setup-overlay-nfs ${hostname} ${node_ip}
   setup-tftp ${boot_dir} ${tftp_dir}
   load
 
   echo -n "Serve TFTP from " 1>&2; echo ${tftp_dir}
-  echo -n "Serve NFSv3 to " 1>&2; echo ${node_ip}
+  echo -n "Serve NFSv3 root to " 1>&2; echo ${node_ip}
+  echo -n "Serve NFSv3 overlay for " 1>&2; echo ${hostname}
 }
 
 ################################################################################

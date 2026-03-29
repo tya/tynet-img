@@ -59,8 +59,8 @@ Calls `customize-img`, then configures the kickstart host to serve the node:
 - The Pi serial is derived from the basename of `TFTP_DIR`
 
 ```bash
-sudo ./serve-img /srv/tftpboot/244634d3 10.0.60.0/24 10.0.60.10   # pi2
-sudo ./serve-img /srv/tftpboot/a43386be 10.0.60.0/24 10.0.60.10   # pi3
+sudo ./serve-img /srv/tftpboot/244634d3 10.0.60.0/24 10.0.60.10 pi2   # pi2
+sudo ./serve-img /srv/tftpboot/a43386be 10.0.60.0/24 10.0.60.10 pi3   # pi3
 ```
 
 ### `configure-tftp`
@@ -122,8 +122,8 @@ sudo ./configure-tftp
 # 2. Add cloud-init seed data for the node
 #    Create cloud-init/<serial>/meta-data and user-data
 
-# 3. Serve NFS + TFTP boot files for each node
-sudo ./serve-img /srv/tftpboot/<serial> 10.0.60.0/24 10.0.60.10
+# 3. Serve NFS + TFTP boot files for each node (hostname used for overlay layer)
+sudo ./serve-img /srv/tftpboot/<serial> 10.0.60.0/24 10.0.60.10 <hostname>
 
 # 4. Start the cloud-init HTTP server
 ./serve-cloud-init -dir ~/src/tynet-img/cloud-init &
