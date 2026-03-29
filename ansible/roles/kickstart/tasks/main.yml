@@ -1,7 +1,6 @@
 ---
-# Kickstart host: TFTP, NFS, and cloud-init service setup.
-# Replaces the configure-tftp shell script.
-# Per-node NFS export entries are still managed by serve-img.
+# Kickstart host: TFTP, NFS, cloud-init service, and per-node export setup.
+# serve-img handles image extraction/customization only; server config lives here.
 
 - name: Create ty user
   user:
@@ -118,5 +117,92 @@
 - name: Enable and start serve-cloud-init
   service:
     name: serve-cloud-init
+    enabled: yes
+    state: started
+
+# Per-node server-side config — loops over the [nodes] inventory group.
+# host_vars/<node>.yml must define: serial, node_ip, nfs_fsid
+
+- name: Create per-node overlay directories
+  file:
+    path: "/exports/overlay/{{ hostvars[node].inventory_hostname_short }}/{{ subdir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop: "{{ groups['nodes'] | product(['upper', 'work']) | list }}"
+  vars:
+    node: "{{ item[0] }}"
+    subdir: "{{ item[1] }}"
+
+- name: Export read-only NFS root (shared base image)
+  lineinfile:
+    path: /etc/exports
+    line: "/exports/netboot/ubuntu-26.04 {{ hostvars[node].node_ip }}(ro,sync,no_subtree_check,no_root_squash,fsid=1)"
+    create: yes
+  loop: "{{ groups['nodes'] }}"
+  loop_control:
+    loop_var: node
+  notify: reload nfs exports
+
+- name: Export per-node NFS overlay (writable upper layer)
+  lineinfile:
+    path: /etc/exports
+    line: "/exports/overlay/{{ hostvars[node].inventory_hostname_short }} {{ hostvars[node].node_ip }}(rw,sync,no_subtree_check,no_root_squash,fsid={{ hostvars[node].nfs_fsid }})"
+    create: yes
+  loop: "{{ groups['nodes'] }}"
+  loop_control:
+    loop_var: node
+  notify: reload nfs exports
+
+- name: Create per-node TFTP directories
+  file:
+    path: "/srv/tftpboot/{{ hostvars[node].serial }}"
+    state: directory
+    owner: tftp
+    group: tftp
+    mode: '0755'
+  loop: "{{ groups['nodes'] }}"
+  loop_control:
+    loop_var: node
+
+- name: Check base image boot directory exists
+  stat:
+    path: /exports/netboot/ubuntu-26.04/boot
+  register: base_boot
+
+- name: Bind-mount boot partition into TFTP directory
+  mount:
+    path: "/srv/tftpboot/{{ hostvars[node].serial }}"
+    src: /exports/netboot/ubuntu-26.04/boot
+    fstype: none
+    opts: defaults,bind
+    state: mounted
+  loop: "{{ groups['nodes'] }}"
+  loop_control:
+    loop_var: node
+  when: base_boot.stat.exists
+
+- name: Install update-base systemd service
+  template:
+    src: update-base.service.j2
+    dest: /etc/systemd/system/update-base.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: reload systemd
+
+- name: Install update-base systemd timer
+  template:
+    src: update-base.timer.j2
+    dest: /etc/systemd/system/update-base.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify: reload systemd
+
+- name: Enable and start update-base timer
+  service:
+    name: update-base.timer
     enabled: yes
     state: started

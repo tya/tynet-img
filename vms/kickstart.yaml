@@ -5,7 +5,10 @@
 # Uses socket_vmnet shared network so both VMs can communicate directly.
 #
 # Start: limactl start vms/kickstart.yaml
+# Start: make start
+#
 # Shell: limactl shell kickstart
+# Shell: make kickstart
 
 vmType: vz
 os: Linux
