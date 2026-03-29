@@ -7,7 +7,7 @@ set -ex
 ##
 # usage
 function usage {
-  echo Usage: customize-img [kickstart_ip] [serial] [hostname]
+  echo "Usage: customize-img [kickstart_ip] [serial] [hostname]"
 }
 
 ##
@@ -18,10 +18,10 @@ function customize_root {
 
   # fstab - ro since overlayfs handles writes
   local fsline="${ip}:${root_dir}/ / nfs defaults,ro,nolock,errors=remount-ro 0 0"
-  echo "${fsline}" > ${root_dir}/etc/fstab
+  echo "${fsline}" > "${root_dir}/etc/fstab"
 
   # disable resizefs
-  touch ${root_dir}/etc/growroot-disabled
+  touch "${root_dir}/etc/growroot-disabled"
 }
 
 ##
@@ -34,9 +34,7 @@ function customize_boot {
 
   # cmdline.txt - ro NFS root + overlay_host for per-node overlayfs
   local cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${ip}:${root_dir},vers=3 ro ip=dhcp rootwait overlay_host=${hostname} ds=nocloud;s=http://${ip}:8000/${serial}/"
-  echo "${cmdline}" > ${boot_dir}/cmdline.txt
-
-
+  echo "${cmdline}" > "${boot_dir}/cmdline.txt"
 }
 
 ##
@@ -44,16 +42,17 @@ function customize_boot {
 # and install the overlayroot-nfs-sync shutdown service
 function install_overlay_hook {
   local root_dir=${1}
-  local script_dir=$(dirname $0)
+  local script_dir
+  script_dir=$(dirname "$0")
   local hook_dst=${root_dir}/etc/initramfs-tools/scripts/init-bottom/overlayroot-nfs
 
-  mkdir -p $(dirname ${hook_dst})
-  cp ${script_dir}/overlayroot-nfs ${hook_dst}
-  chmod +x ${hook_dst}
+  mkdir -p "$(dirname "${hook_dst}")"
+  cp "${script_dir}/overlayroot-nfs" "${hook_dst}"
+  chmod +x "${hook_dst}"
 
   # Shutdown sync service: copies tmpfs upper back to NFS state store on reboot/shutdown
   local svc_dst=${root_dir}/etc/systemd/system/overlayroot-nfs-sync.service
-  cat > ${svc_dst} << 'EOF'
+  cat > "${svc_dst}" << 'EOF'
 [Unit]
 Description=Sync overlay upper layer back to NFS state store
 DefaultDependencies=no
@@ -70,26 +69,27 @@ ExecStart=/usr/local/sbin/overlayroot-nfs-sync
 WantedBy=halt.target reboot.target shutdown.target
 EOF
 
-  cp ${script_dir}/overlayroot-nfs-sync ${root_dir}/usr/local/sbin/overlayroot-nfs-sync
-  chmod +x ${root_dir}/usr/local/sbin/overlayroot-nfs-sync
+  cp "${script_dir}/overlayroot-nfs-sync" "${root_dir}/usr/local/sbin/overlayroot-nfs-sync"
+  chmod +x "${root_dir}/usr/local/sbin/overlayroot-nfs-sync"
 
   # Enable the service
-  mkdir -p ${root_dir}/etc/systemd/system/halt.target.wants
-  mkdir -p ${root_dir}/etc/systemd/system/reboot.target.wants
-  mkdir -p ${root_dir}/etc/systemd/system/shutdown.target.wants
+  mkdir -p "${root_dir}/etc/systemd/system/halt.target.wants"
+  mkdir -p "${root_dir}/etc/systemd/system/reboot.target.wants"
+  mkdir -p "${root_dir}/etc/systemd/system/shutdown.target.wants"
   ln -sf /etc/systemd/system/overlayroot-nfs-sync.service \
-    ${root_dir}/etc/systemd/system/halt.target.wants/overlayroot-nfs-sync.service
+    "${root_dir}/etc/systemd/system/halt.target.wants/overlayroot-nfs-sync.service"
   ln -sf /etc/systemd/system/overlayroot-nfs-sync.service \
-    ${root_dir}/etc/systemd/system/reboot.target.wants/overlayroot-nfs-sync.service
+    "${root_dir}/etc/systemd/system/reboot.target.wants/overlayroot-nfs-sync.service"
   ln -sf /etc/systemd/system/overlayroot-nfs-sync.service \
-    ${root_dir}/etc/systemd/system/shutdown.target.wants/overlayroot-nfs-sync.service
+    "${root_dir}/etc/systemd/system/shutdown.target.wants/overlayroot-nfs-sync.service"
 }
 
 ##
 # rebuild_initramfs - chroot into the extracted image and run update-initramfs
 function rebuild_initramfs {
   local root_dir=${1}
-  local host_arch=$(uname -m)
+  local host_arch
+  host_arch=$(uname -m)
   local qemu_bin=/usr/bin/qemu-aarch64-static
 
   # Cleanup handler — runs even if chroot fails
@@ -113,10 +113,10 @@ function rebuild_initramfs {
 
   # Cross-arch: copy qemu static binary for aarch64
   if [ "${host_arch}" != "aarch64" ]; then
-    if [ ! -f ${qemu_bin} ]; then
+    if [ ! -f "${qemu_bin}" ]; then
       apt-get install -y qemu-user-static > /dev/null
     fi
-    cp ${qemu_bin} "${root_dir}/usr/bin/"
+    cp "${qemu_bin}" "${root_dir}/usr/bin/"
   fi
 
   chroot "${root_dir}" update-initramfs -u -k all
@@ -129,15 +129,15 @@ function customize-img {
   local serial=${2:?"serial required"}
   local hostname=${3:-${serial}}
   local root_dir
-  read root_dir <<< $(./extract-img)
+  read -r root_dir <<< "$(./extract-img)"
   local boot_dir=${root_dir}/boot
 
-  customize_root ${root_dir} ${kickstart_ip}
-  customize_boot ${boot_dir} ${kickstart_ip} ${serial} ${hostname}
-  install_overlay_hook ${root_dir}
-  rebuild_initramfs ${root_dir}
+  customize_root "${root_dir}" "${kickstart_ip}"
+  customize_boot "${boot_dir}" "${kickstart_ip}" "${serial}" "${hostname}"
+  install_overlay_hook "${root_dir}"
+  rebuild_initramfs "${root_dir}"
 
-  echo ${root_dir}
+  echo "${root_dir}"
 }
 
 ################################################################################

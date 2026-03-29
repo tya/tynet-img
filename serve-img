@@ -15,9 +15,9 @@ function main {
   local hostname=${3:-${serial}}
 
   local root_dir
-  read root_dir <<< $(./customize-img ${kickstart_ip} ${serial} ${hostname})
+  read -r root_dir <<< "$(./customize-img "${kickstart_ip}" "${serial}" "${hostname}")"
 
-  echo -n "Image ready at " 1>&2; echo ${root_dir}
+  echo -n "Image ready at " 1>&2; echo "${root_dir}"
 }
 
 main "$@"

@@ -21,6 +21,7 @@ PREREQS=""
 prereqs() { echo "$PREREQS"; }
 case $1 in prereqs) prereqs; exit 0;; esac
 
+# shellcheck source=/dev/null
 . /scripts/functions
 
 cmdline_val() {
@@ -62,12 +63,13 @@ fi
 # Bind-mount the current NFS root as the read-only lower layer
 LOWER="/run/overlayroot-lower"
 mkdir -p "${LOWER}"
+# shellcheck disable=SC2154  # rootmnt is set by the initramfs framework
 mount --bind "${rootmnt}" "${LOWER}"
 mount --bind -o remount,ro "${LOWER}"
 
 # Mount overlayfs at rootmnt
 if ! mount -t overlay overlay \
-        -o lowerdir="${LOWER}",upperdir="${TMPFS_UPPER}/upper",workdir="${TMPFS_UPPER}/work" \
+        -o "lowerdir=${LOWER},upperdir=${TMPFS_UPPER}/upper,workdir=${TMPFS_UPPER}/work" \
         "${rootmnt}"; then
     log_failure_msg "overlayroot-nfs: overlay mount failed, falling back to plain NFS root"
     umount "${TMPFS_UPPER}"
