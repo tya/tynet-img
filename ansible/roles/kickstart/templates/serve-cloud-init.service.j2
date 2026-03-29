@@ -1,0 +1,14 @@
+[Unit]
+Description=cloud-init seed data HTTP server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/src/tynet-img
+ExecStart=/home/ubuntu/src/tynet-img/serve-cloud-init -dir /home/ubuntu/src/tynet-img/cloud-init
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+---
+# Configure the kickstart host (vpn.tynet.us).
+# Sets up TFTP, NFS, and the cloud-init HTTP service.
+# Replaces the configure-tftp shell script.
+#
+# Usage:
+#   ansible-playbook ansible/playbooks/kickstart.yml
+
+- hosts: kickstart
+  become: yes
+  roles:
+    - kickstart

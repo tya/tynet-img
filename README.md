@@ -132,6 +132,46 @@ sudo ./serve-img /srv/tftpboot/<serial> 10.0.60.0/24 10.0.60.10 <hostname>
 # 6. Power on the Pi — it will netboot and run cloud-init
 ```
 
+## Day-2 management with Ansible
+
+After nodes are netbooting, use Ansible for ongoing management from your Mac.
+
+```
+ansible/
+  inventory.ini             # kickstart + pi1-pi4
+  playbooks/
+    kickstart.yml           # configure vpn.tynet.us (TFTP, NFS, cloud-init service)
+    upgrade.yml             # apt upgrade all nodes
+    microk8s.yml            # microk8s status and addon management
+  roles/
+    kickstart/              # replaces configure-tftp shell script
+    nodes/                  # common node config (hostname, SSH keys)
+```
+
+```bash
+# Set up kickstart host (first time or after changes)
+ansible-playbook ansible/playbooks/kickstart.yml
+
+# Upgrade all nodes
+ansible-playbook ansible/playbooks/upgrade.yml
+
+# Upgrade a single node
+ansible-playbook ansible/playbooks/upgrade.yml --limit pi2
+
+# Check microk8s cluster status
+ansible-playbook ansible/playbooks/microk8s.yml --tags status
+```
+
+**What stays in shell scripts vs Ansible:**
+
+| Shell scripts | Ansible |
+|---|---|
+| `extract-img` — download + extract image | Kickstart service config (TFTP, NFS) |
+| `customize-img` — inject overlayfs hook, write cmdline.txt | OS upgrades across nodes |
+| `serve-img` — provision a new node (per-serial) | MicroK8s cluster management |
+| | SSH key rotation |
+| | Reboot management |
+
 ## Local VM test environment
 
 A Lima-based two-VM environment for testing the full netboot stack on Apple Silicon without real hardware. See `vms/`.

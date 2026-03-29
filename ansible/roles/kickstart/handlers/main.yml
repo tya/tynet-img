@@ -1,0 +1,14 @@
+---
+- name: restart tftpd-hpa
+  service:
+    name: tftpd-hpa
+    state: restarted
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: restart serve-cloud-init
+  service:
+    name: serve-cloud-init
+    state: restarted

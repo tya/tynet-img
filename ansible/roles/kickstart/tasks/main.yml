@@ -1,0 +1,90 @@
+---
+# Kickstart host: TFTP, NFS, and cloud-init service setup.
+# Replaces the configure-tftp shell script.
+# Per-node NFS export entries are still managed by serve-img.
+
+- name: Install kickstart packages
+  apt:
+    name:
+      - tftpd-hpa
+      - nfs-kernel-server
+      - rpcbind
+      - make
+      - golang-go
+    state: present
+    update_cache: yes
+
+- name: Create TFTP root directory
+  file:
+    path: /srv/tftpboot
+    state: directory
+    owner: tftp
+    group: tftp
+    mode: '0755'
+
+- name: Create NFS netboot export directory
+  file:
+    path: /exports/netboot
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Create NFS overlay export directory
+  file:
+    path: /exports/overlay
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure tftpd-hpa
+  template:
+    src: tftpd-hpa.j2
+    dest: /etc/default/tftpd-hpa
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart tftpd-hpa
+
+- name: Enable and start rpcbind
+  service:
+    name: rpcbind
+    enabled: yes
+    state: started
+
+- name: Enable and start nfs-server
+  service:
+    name: nfs-server
+    enabled: yes
+    state: started
+
+- name: Enable and start tftpd-hpa
+  service:
+    name: tftpd-hpa
+    enabled: yes
+    state: started
+
+- name: Build serve-cloud-init binary
+  command:
+    cmd: make build
+    chdir: /home/ubuntu/src/tynet-img
+  become: no
+  changed_when: false
+
+- name: Install serve-cloud-init systemd service
+  template:
+    src: serve-cloud-init.service.j2
+    dest: /etc/systemd/system/serve-cloud-init.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart serve-cloud-init
+
+- name: Enable and start serve-cloud-init
+  service:
+    name: serve-cloud-init
+    enabled: yes
+    state: started
