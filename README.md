@@ -8,12 +8,19 @@ A Pi boots over the network by fetching its kernel and boot files via TFTP, then
 
 ```
 Pi (power on)
-  └── TFTP → /srv/tftpboot/<serial>/     (boot files + cmdline.txt)
-  └── NFS  → /exports/netboot/ubuntu-26.04/  (root filesystem)
-  └── HTTP → :8000/<serial>/             (cloud-init user-data + meta-data)
+  └── DHCP  → gets TFTP server IP from UniFi (option 66)
+  └── TFTP  → /srv/tftpboot/<serial>/        (boot files + cmdline.txt)
+  └── NFS   → /exports/netboot/ubuntu-26.04/ (root filesystem)
+  └── HTTP  → :8000/<serial>/                (cloud-init user-data + meta-data)
 ```
 
-All three are served from the kickstart host (`10.0.10.13`).
+All three are served from the kickstart host (`vpn.tynet.us`, `10.0.60.10`).
+
+## Infrastructure
+
+- **Kickstart host**: `vpn.tynet.us` — Ubuntu 22.10, Raspberry Pi, on VLAN 60 (`10.0.60.10`)
+- **Pi VLAN**: `10.0.60.0/24`
+- **UniFi Network Boot**: set to `10.0.60.10` on the VLAN 60 network (sets DHCP option 66)
 
 ## Scripts
 
@@ -27,7 +34,7 @@ Downloads an Ubuntu ARM64 preinstalled image, extracts it, and rsyncs the root a
 
 ```bash
 sudo ./extract-img
-sudo ./extract-img https://cdimage.ubuntu.com/.../ubuntu-26.04-...img.xz /exports/netboot/ubuntu-26
+sudo ./extract-img https://cdimage.ubuntu.com/.../ubuntu-26.04-...img.xz /exports/netboot/ubuntu-26.04
 ```
 
 ### `customize-img [KICKSTART_IP] [SERIAL]`
@@ -40,20 +47,20 @@ Calls `extract-img`, then modifies the extracted filesystem for netboot:
 - Writes the root directory path to stdout
 
 ```bash
-sudo ./customize-img 10.0.10.13 244634d3
+sudo ./customize-img 10.0.60.10 244634d3
 ```
 
-### `serve-img [TFTP_DIR] [NODE_IP]`
+### `serve-img [TFTP_DIR] [NODE_CIDR] [KICKSTART_IP]`
 Calls `customize-img`, then configures the kickstart host to serve the node:
 
-- Adds an NFS export for the node's IP in `/etc/exports`
+- Adds an NFS export for the node subnet in `/etc/exports`
 - Bind-mounts the boot directory into the TFTP directory and adds it to `/etc/fstab`
 - Restarts `rpcbind`, `nfs-server`, and `tftpd-hpa`
 - The Pi serial is derived from the basename of `TFTP_DIR`
 
 ```bash
-sudo ./serve-img /srv/tftpboot/244634d3 10.0.10.12/32   # pi2
-sudo ./serve-img /srv/tftpboot/a43386be 10.0.10.13/32   # pi3
+sudo ./serve-img /srv/tftpboot/244634d3 10.0.60.0/24 10.0.60.10   # pi2
+sudo ./serve-img /srv/tftpboot/a43386be 10.0.60.0/24 10.0.60.10   # pi3
 ```
 
 ### `configure-tftp`
@@ -67,8 +74,8 @@ sudo ./configure-tftp
 Go program that serves per-node cloud-init seed data over HTTP on port 8000. Defaults to the `cloud-init/` directory adjacent to the binary.
 
 ```bash
-./serve-cloud-init
-./serve-cloud-init -dir /srv/cloud-init -addr :9000
+./serve-cloud-init -dir ~/src/tynet-img/cloud-init
+./serve-cloud-init -dir ~/src/tynet-img/cloud-init -addr :9000
 ```
 
 ## Per-node cloud-init data
@@ -83,42 +90,75 @@ cloud-init/
   a43386be/        # pi3.tynet.us
     meta-data
     user-data
+  testnode/        # VM test node
+    meta-data
+    user-data
 ```
 
-`meta-data` sets the instance ID and hostname. `user-data` is a standard `#cloud-config` document — put your MicroK8s snap install, users, SSH keys, and join tokens here.
+`meta-data` sets the instance ID and hostname. `user-data` is a standard `#cloud-config` document.
 
 ## Building serve-cloud-init
 
 Requires Go 1.22+.
 
 ```bash
-# build for the local machine (development/testing)
-make build
-
-# build for the kickstart host (linux/amd64)
-make build-linux
-
-# run tests
-make test
+make        # build for local machine
+make test   # run tests
+make clean  # remove binary
 ```
 
-The binary is written to `./serve-cloud-init`. Copy it to the kickstart host alongside the `cloud-init/` directory.
+The binary is written to `./serve-cloud-init`.
 
 ## Dependencies
 
-The kickstart host requires: `kpartx`, `wget`, `nfs-server`, `rpcbind`, `tftpd-hpa`
+The kickstart host requires: `kpartx`, `wget`, `nfs-kernel-server`, `rpcbind`, `tftpd-hpa`, `make`, `golang-go`
 
 ## Provisioning a new node (end-to-end)
 
 ```bash
-# 1. On kickstart host: set up TFTP, serve NFS + boot files
-sudo ./serve-img /srv/tftpboot/<serial> <node-ip>/32
+# 1. On kickstart host: one-time TFTP setup
+sudo ./configure-tftp
 
 # 2. Add cloud-init seed data for the node
-#    Edit cloud-init/<serial>/user-data
+#    Create cloud-init/<serial>/meta-data and user-data
 
-# 3. On kickstart host: serve cloud-init data
-./serve-cloud-init
+# 3. Serve NFS + TFTP boot files for each node
+sudo ./serve-img /srv/tftpboot/<serial> 10.0.60.0/24 10.0.60.10
 
-# 4. Power on the Pi — it will netboot and run cloud-init
+# 4. Start the cloud-init HTTP server
+./serve-cloud-init -dir ~/src/tynet-img/cloud-init &
+
+# 5. In UniFi: set Network Boot to 10.0.60.10 on the VLAN 60 network
+
+# 6. Power on the Pi — it will netboot and run cloud-init
+```
+
+## Local VM test environment
+
+A Lima-based two-VM environment for testing the full netboot stack on Apple Silicon without real hardware. See `vms/`.
+
+```bash
+cd vms
+make start      # start both VMs
+make kickstart  # shell into kickstart VM
+make node       # shell into node VM
+make stop       # stop both VMs
+make clean      # delete both VMs
+```
+
+The kickstart VM is fixed at `192.168.105.10`. Inside the kickstart VM:
+
+```bash
+cd /Users/ty/src/tynet-img
+sudo ./configure-tftp
+sudo ./serve-img /srv/tftpboot/testnode 192.168.105.0/24 192.168.105.10
+./serve-cloud-init -dir /Users/ty/src/tynet-img/cloud-init &
+```
+
+From the node VM, verify each service:
+
+```bash
+tftp 192.168.105.10 -c get testnode/vmlinuz        # TFTP
+sudo mount -t nfs 192.168.105.10:/exports/netboot/ubuntu-26.04 /mnt  # NFS
+curl http://192.168.105.10:8000/testnode/meta-data  # cloud-init HTTP
 ```
