@@ -5,7 +5,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(make start:*)",
-      "Bash(make provision:*)"
+      "Bash(make provision:*)",
+      "Bash(limactl list:*)",
+      "Bash(cd /Users/ty/src/tynet-img/vms && make test 2>&1)"
     ]
   }
 }
