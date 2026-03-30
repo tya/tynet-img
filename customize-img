@@ -95,11 +95,14 @@ function rebuild_initramfs {
   host_arch=$(uname -m)
   local qemu_bin=/usr/bin/qemu-aarch64-static
 
-  # systemd-nspawn requires /dev to be empty; unmount any leftover nspawn mounts
-  # then clear and recreate /dev
+  # systemd-nspawn requires /dev to be a pre-mounted filesystem, not a
+  # populated directory on the same fs as root. Unmount any leftover mounts
+  # from prior failed runs, then mount a fresh tmpfs for nspawn to populate.
   awk -v p="${root_dir}/dev" '$2 ~ "^"p {print $2}' /proc/mounts \
     | sort -r | xargs -r umount -lf 2>/dev/null || true
-  rm -rf "${root_dir:?}/dev" && mkdir -p "${root_dir}/dev"
+  umount -lf "${root_dir}/dev" 2>/dev/null || true
+  mount -t tmpfs tmpfs "${root_dir}/dev"
+  trap 'umount -lf "${root_dir}/dev"' RETURN
 
   # Cross-arch: install qemu static binary so aarch64 binaries run on x86_64
   if [ "${host_arch}" != "aarch64" ]; then
