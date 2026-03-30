@@ -86,41 +86,26 @@ EOF
 }
 
 ##
-# rebuild_initramfs - chroot into the extracted image and run update-initramfs
+# rebuild_initramfs - run update-initramfs inside the extracted image.
+# Uses systemd-nspawn which handles /proc /dev /sys automatically and
+# works reliably for both native and cross-arch builds.
 function rebuild_initramfs {
   local root_dir=${1}
   local host_arch
   host_arch=$(uname -m)
   local qemu_bin=/usr/bin/qemu-aarch64-static
 
-  # Cleanup handler — runs even if chroot fails
-  local cleanup_done=0
-  _rebuild_cleanup() {
-    [ "${cleanup_done}" -eq 1 ] && return
-    cleanup_done=1
-    umount "${root_dir}/dev/pts" 2>/dev/null || true
-    umount "${root_dir}/dev"     2>/dev/null || true
-    umount "${root_dir}/sys"     2>/dev/null || true
-    umount "${root_dir}/proc"    2>/dev/null || true
-    [ "${host_arch}" != "aarch64" ] && rm -f "${root_dir}/usr/bin/qemu-aarch64-static" || true
-  }
-  trap _rebuild_cleanup RETURN
-
-  # Bind filesystems needed for chroot
-  mount -t proc  proc     "${root_dir}/proc"
-  mount -t sysfs sysfs    "${root_dir}/sys"
-  mount --bind   /dev     "${root_dir}/dev"
-  mount --bind   /dev/pts "${root_dir}/dev/pts"
-
-  # Cross-arch: copy qemu static binary for aarch64
+  # Cross-arch: install qemu static binary so aarch64 binaries run on x86_64
   if [ "${host_arch}" != "aarch64" ]; then
     if [ ! -f "${qemu_bin}" ]; then
       apt-get install -y qemu-user-static > /dev/null
     fi
     cp "${qemu_bin}" "${root_dir}/usr/bin/"
+    trap 'rm -f "${root_dir}/usr/bin/qemu-aarch64-static"' RETURN
   fi
 
-  chroot "${root_dir}" update-initramfs -u -k all
+  DEBIAN_FRONTEND=noninteractive \
+    systemd-nspawn -D "${root_dir}" update-initramfs -u -k all
 }
 
 ##
