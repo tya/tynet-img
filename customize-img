@@ -48,7 +48,7 @@ function install_overlay_hook {
   local hook_dst=${root_dir}/etc/initramfs-tools/scripts/init-bottom/overlayroot-nfs
 
   mkdir -p "$(dirname "${hook_dst}")"
-  cp "${script_dir}/overlayroot-nfs" "${hook_dst}"
+  cp "${script_dir}/hooks/overlayroot-nfs" "${hook_dst}"
   chmod +x "${hook_dst}"
 
   # Shutdown sync service: copies tmpfs upper back to NFS state store on reboot/shutdown
@@ -70,7 +70,7 @@ ExecStart=/usr/local/sbin/overlayroot-nfs-sync
 WantedBy=halt.target reboot.target shutdown.target
 EOF
 
-  cp "${script_dir}/overlayroot-nfs-sync" "${root_dir}/usr/local/sbin/overlayroot-nfs-sync"
+  cp "${script_dir}/hooks/overlayroot-nfs-sync" "${root_dir}/usr/local/sbin/overlayroot-nfs-sync"
   chmod +x "${root_dir}/usr/local/sbin/overlayroot-nfs-sync"
 
   # Enable the service

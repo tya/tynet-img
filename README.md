@@ -101,7 +101,7 @@ make test   # run Go unit tests
 make clean  # remove binary
 ```
 
-The binary is written to `./serve-cloud-init`.
+Source lives in `serve-cloud-init/`. The binary is written to `./serve-cloud-init`.
 
 ## Provisioning the kickstart host
 

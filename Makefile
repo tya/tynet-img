@@ -1,5 +1,5 @@
 BINARY      = serve-cloud-init
-CMD         = ./cmd/serve-cloud-init
+CMD_DIR     = serve-cloud-init
 BASE_IMG    = /exports/netboot/ubuntu-26.04
 OVERLAY_DIR = /exports/overlay
 
@@ -27,13 +27,13 @@ help:
 	@echo "  reboot-nodes           drain and reboot all nodes via Ansible"
 
 build:
-	go build -o $(BINARY) $(CMD)
+	cd $(CMD_DIR) && go build -o ../$(BINARY) .
 
 build-linux:
-	GOOS=linux GOARCH=amd64 go build -o $(BINARY) $(CMD)
+	cd $(CMD_DIR) && GOOS=linux GOARCH=amd64 go build -o ../$(BINARY) .
 
 test:
-	go test -v ./cmd/serve-cloud-init/...
+	cd $(CMD_DIR) && go test -v .
 
 clean:
 	rm -f $(BINARY)

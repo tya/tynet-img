@@ -14,8 +14,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-      - run: go test ./cmd/...
+          go-version-file: serve-cloud-init/go.mod
+      - run: cd serve-cloud-init && go test -v .
 
   shellcheck:
     name: ShellCheck
@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get install -y shellcheck
-      - run: shellcheck --severity=warning extract-img customize-img overlayroot-nfs overlayroot-nfs-sync
+      - run: shellcheck --severity=warning extract-img customize-img hooks/overlayroot-nfs hooks/overlayroot-nfs-sync
 
   ansible-lint:
     name: Ansible lint
