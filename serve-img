@@ -15,7 +15,8 @@ function main {
   local hostname=${3:-${serial}}
 
   local root_dir
-  read -r root_dir <<< "$(./customize-img "${kickstart_ip}" "${serial}" "${hostname}")"
+  root_dir=$(./customize-img "${kickstart_ip}" "${serial}" "${hostname}")
+  [ -n "${root_dir}" ] || { echo "error: customize-img produced no output" >&2; exit 1; }
 
   echo -n "Image ready at " 1>&2; echo "${root_dir}"
 }
