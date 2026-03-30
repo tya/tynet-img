@@ -1,4 +1,2 @@
 /serve-cloud-init
-cache/
-exports/
-overlay/
+tmp/
