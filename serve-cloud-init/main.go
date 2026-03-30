@@ -19,9 +19,9 @@ func newHandler(dir string) http.Handler {
 func defaultDir() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return "cloud-init"
+		return "serve-cloud-init/cloud-init"
 	}
-	return filepath.Join(filepath.Dir(exe), "cloud-init")
+	return filepath.Join(filepath.Dir(exe), "serve-cloud-init/cloud-init")
 }
 
 func main() {

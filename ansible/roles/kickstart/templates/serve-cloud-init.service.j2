@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User={{ ansible_user }}
 WorkingDirectory={{ repo_dir }}
-ExecStart={{ repo_dir }}/serve-cloud-init -dir {{ repo_dir }}/cloud-init
+ExecStart={{ repo_dir }}/serve-cloud-init -dir {{ repo_dir }}/serve-cloud-init/cloud-init
 Restart=always
 RestartSec=5
 

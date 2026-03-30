@@ -68,16 +68,16 @@ sudo ./customize-img 10.0.60.10 244634d3 pi2   # kickstart_ip serial hostname
 Go program that serves per-node cloud-init seed data over HTTP on port 8000. Managed as a systemd service by Ansible; can also be run manually.
 
 ```bash
-./serve-cloud-init -dir ~/src/tynet-img/cloud-init
-./serve-cloud-init -dir ~/src/tynet-img/cloud-init -addr :9000
+./serve-cloud-init -dir ~/src/tynet-img/serve-cloud-init/cloud-init
+./serve-cloud-init -dir ~/src/tynet-img/serve-cloud-init/cloud-init -addr :9000
 ```
 
 ## Per-node cloud-init data
 
-Seed files live in `cloud-init/<serial>/` and are served to each node on first boot.
+Seed files live in `serve-cloud-init/cloud-init/<serial>/` and are served to each node on first boot.
 
 ```
-cloud-init/
+serve-cloud-init/cloud-init/
   244634d3/        # pi2.tynet.us
     meta-data
     user-data
@@ -181,7 +181,7 @@ The kickstart host also runs an `update-base.timer` systemd unit that runs `make
 #    Create ansible/host_vars/<hostname>.yml with serial, node_ip, nfs_fsid
 
 # 2. Add cloud-init seed data
-#    Create cloud-init/<serial>/meta-data and user-data
+#    Create serve-cloud-init/cloud-init/<serial>/meta-data and user-data
 
 # 3. Provision the kickstart host (creates NFS exports + TFTP dirs for the new node)
 make provision-kickstart

@@ -9,7 +9,7 @@ import (
 )
 
 func TestServeCloudInit(t *testing.T) {
-	server := httptest.NewServer(newHandler("../cloud-init"))
+	server := httptest.NewServer(newHandler("cloud-init"))
 	defer server.Close()
 
 	tests := []struct {
