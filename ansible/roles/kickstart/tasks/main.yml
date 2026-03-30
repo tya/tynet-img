@@ -96,7 +96,7 @@
 
 - name: Clone tynet-img repo
   ansible.builtin.git:
-    repo: https://github.com/tya/tynet-img.git
+    repo: ssh://git@github.com/tya/tynet-img.git
     dest: "{{ repo_dir }}"
     version: main
     update: true
@@ -153,7 +153,7 @@
 
 - name: Create per-node TFTP directories
   ansible.builtin.file:
-    path: "/srv/tftpboot/{{ hostvars[node].serial }}"
+    path: "/srv/tftpboot/{{ hostvars[node].node_serial }}"
     state: directory
     owner: tftp
     group: tftp
@@ -161,7 +161,7 @@
   loop: "{{ groups['nodes'] }}"
   loop_control:
     loop_var: node
-  when: hostvars[node].serial | default('TODO') != 'TODO'
+  when: hostvars[node].node_serial | default('TODO') != 'TODO'
 
 - name: Check base image boot directory exists
   ansible.builtin.stat:
@@ -170,7 +170,7 @@
 
 - name: Bind-mount boot partition into TFTP directory
   ansible.posix.mount:
-    path: "/srv/tftpboot/{{ hostvars[node].serial }}"
+    path: "/srv/tftpboot/{{ hostvars[node].node_serial }}"
     src: /exports/netboot/ubuntu-26.04/boot
     fstype: none
     opts: defaults,bind
@@ -178,15 +178,13 @@
   loop: "{{ groups['nodes'] }}"
   loop_control:
     loop_var: node
-  when: kickstart_base_boot.stat.exists
+  when: kickstart_base_boot.stat.exists and hostvars[node].node_serial | default('TODO') != 'TODO'
   notify: Restart tftpd-hpa
 
 - name: Make boot files world-readable for tftpd
-  ansible.builtin.file:
-    path: /exports/netboot/ubuntu-26.04/boot
-    recurse: true
-    mode: a+r
+  ansible.builtin.command: chmod -R a+r /exports/netboot/ubuntu-26.04/boot
   when: kickstart_base_boot.stat.exists
+  changed_when: true
   notify: Restart tftpd-hpa
 
 - name: Install update-base systemd service
