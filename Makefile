@@ -3,8 +3,28 @@ CMD         = ./cmd/serve-cloud-init
 BASE_IMG    = /exports/netboot/ubuntu-26.04
 OVERLAY_DIR = /exports/overlay
 
-.PHONY: build build-linux test clean provision-kickstart \
+.PHONY: help build build-linux test clean provision-kickstart \
         update-base wipe-overlay-% wipe-all-overlays reboot-nodes
+
+.DEFAULT_GOAL := help
+
+help:
+	@echo "Usage: make <target>"
+	@echo ""
+	@echo "Build:"
+	@echo "  build                  build serve-cloud-init for local machine"
+	@echo "  build-linux            cross-compile serve-cloud-init for linux/amd64"
+	@echo "  test                   run Go unit tests"
+	@echo "  clean                  remove built binary"
+	@echo ""
+	@echo "Provisioning:"
+	@echo "  provision-kickstart    run Ansible against the production kickstart host"
+	@echo ""
+	@echo "Maintenance (run on kickstart host):"
+	@echo "  update-base            apply security patches to the shared base image"
+	@echo "  wipe-overlay-<node>    wipe a single node's overlay (e.g. make wipe-overlay-pi2)"
+	@echo "  wipe-all-overlays      wipe all nodes' overlays (requires CONFIRM=yes)"
+	@echo "  reboot-nodes           drain and reboot all nodes via Ansible"
 
 build:
 	go build -o $(BINARY) $(CMD)

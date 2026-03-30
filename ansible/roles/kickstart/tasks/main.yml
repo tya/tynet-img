@@ -1,6 +1,6 @@
 ---
 # Kickstart host: TFTP, NFS, cloud-init service, and per-node export setup.
-# serve-img handles image extraction/customization only; server config lives here.
+# customize-img handles image extraction/customization only; server config lives here.
 
 - name: Create ty user
   ansible.builtin.user:

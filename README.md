@@ -64,13 +64,6 @@ Calls `extract-img`, then modifies the extracted filesystem for netboot:
 sudo ./customize-img 10.0.60.10 244634d3 pi2   # kickstart_ip serial hostname
 ```
 
-### `serve-img [KICKSTART_IP] [SERIAL] [HOSTNAME]`
-Calls `customize-img` and prints the root directory path. Server-side configuration (NFS exports, TFTP bind-mounts, overlay directories) is handled by Ansible.
-
-```bash
-sudo ./serve-img 10.0.60.10 244634d3 pi2
-```
-
 ### `serve-cloud-init [-dir DIR] [-addr ADDR]`
 Go program that serves per-node cloud-init seed data over HTTP on port 8000. Managed as a systemd service by Ansible; can also be run manually.
 
@@ -152,7 +145,6 @@ ansible/
 |---|---|
 | `extract-img` — download + extract base image | Kickstart host packages and services |
 | `customize-img` — overlayfs hooks, cmdline.txt, overlay sync service | Per-node NFS exports and TFTP bind-mounts |
-| `serve-img` — thin wrapper calling customize-img | Daily base image update timer |
 | | OS upgrades, SSH key rotation, reboot management |
 
 ## Maintenance
@@ -195,7 +187,7 @@ The kickstart host also runs an `update-base.timer` systemd unit that runs `make
 make provision-kickstart
 
 # 4. On the kickstart host: build the base image
-sudo ./serve-img 10.0.60.10 <serial> <hostname>
+sudo ./customize-img 10.0.60.10 <serial> <hostname>
 
 # 5. In UniFi: set Network Boot to 10.0.60.10 on the VLAN 60 network
 
@@ -227,7 +219,7 @@ The kickstart VM is fixed at `192.168.105.10`. After `make provision`, build the
 
 ```bash
 cd /Users/ty/src/tynet-img
-sudo ./serve-img 192.168.105.10 testnode testnode
+sudo ./customize-img 192.168.105.10 testnode testnode
 ```
 
 Then run the integration tests from your Mac:
