@@ -29,10 +29,10 @@ mounts:
     writable: true
   - location: /tmp/lima
     writable: true
-  - location: "~/src/tynet-img/cache"
+  - location: "~/src/tynet-img/tmp/cache"
     mountPoint: /var/cache/img
     writable: true
-  - location: "~/src/tynet-img/exports"
+  - location: "~/src/tynet-img/tmp/exports"
     mountPoint: /exports/netboot
     writable: true
   # /exports/overlay intentionally NOT virtiofs-mounted: virtiofs doesn't support
