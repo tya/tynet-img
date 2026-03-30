@@ -34,6 +34,8 @@
       - make
       - golang-go
       - git
+      - systemd-container
+      - qemu-user-static
     state: present
     update_cache: true
 
