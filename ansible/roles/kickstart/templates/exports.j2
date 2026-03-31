@@ -2,9 +2,7 @@
 # Do not edit manually; changes will be overwritten on next provision.
 
 # Shared read-only base image (all provisioned nodes)
-{% for node in groups['nodes'] %}
 /exports/netboot/ubuntu-26.04 {{ subnet }}(ro,sync,no_subtree_check,no_root_squash,fsid=0)
-{% endfor %}
 
 # Per-node writable overlay state store
 {% for node in groups['nodes'] %}
