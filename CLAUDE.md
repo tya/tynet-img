@@ -56,7 +56,7 @@ make pi3
 ## Dependencies
 
 - `kpartx`, `wget`, `unxz`, `rsync` — for image extraction
-- `systemd-container`, `qemu-user-static` — for initramfs rebuild via `systemd-nspawn`
+- `systemd-container` — for initramfs rebuild via `systemd-nspawn`
 - `nfs-server`, `rpcbind`, `tftpd-hpa` — for serving (managed by Ansible)
 - Ubuntu ARM64 preinstalled server images from `cdimage.ubuntu.com`
 

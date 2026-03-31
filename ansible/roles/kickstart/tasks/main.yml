@@ -35,7 +35,6 @@
       - golang-go
       - git
       - systemd-container
-      - qemu-user-static
       - ansible
     state: present
     update_cache: true
