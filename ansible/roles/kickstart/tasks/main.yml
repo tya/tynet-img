@@ -148,16 +148,9 @@
 # host_vars/<node>.yml must define: node_serial, nfs_fsid
 
 - name: Create per-node overlay directories
-  ansible.builtin.file:
-    path: "/exports/overlay/{{ hostvars[node].inventory_hostname_short }}/{{ subdir }}"
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-  loop: "{{ groups['nodes'] | product(['upper', 'work']) | list }}"
-  vars:
-    node: "{{ item[0] }}"
-    subdir: "{{ item[1] }}"
+  ansible.builtin.command:
+    cmd: mkdir -p {{ groups['nodes'] | map('extract', hostvars, 'inventory_hostname_short') | map('regex_replace', '^(.*)$', '/exports/overlay/\\1/upper /exports/overlay/\\1/work') | join(' ') }}
+  changed_when: false
 
 - name: Write /etc/exports from template
   ansible.builtin.template:
@@ -169,16 +162,9 @@
   notify: Reload NFS exports
 
 - name: Create per-node TFTP directories
-  ansible.builtin.file:
-    path: "/srv/tftpboot/{{ hostvars[node].node_serial }}"
-    state: directory
-    owner: tftp
-    group: tftp
-    mode: '0755'
-  loop: "{{ groups['nodes'] }}"
-  loop_control:
-    loop_var: node
-  when: hostvars[node].node_serial | default('TODO') != 'TODO'
+  ansible.builtin.command:
+    cmd: mkdir -p {{ groups['nodes'] | map('extract', hostvars) | selectattr('node_serial', 'defined') | rejectattr('node_serial', 'equalto', 'TODO') | map(attribute='node_serial') | map('regex_replace', '^(.*)$', '/srv/tftpboot/\\1') | join(' ') }}
+  changed_when: false
 
 - name: Check base image boot directory exists
   ansible.builtin.stat:
