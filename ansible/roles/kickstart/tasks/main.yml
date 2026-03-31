@@ -138,7 +138,7 @@
     state: started
 
 # Per-node server-side config — loops over the [nodes] inventory group.
-# host_vars/<node>.yml must define: serial, node_ip, nfs_fsid
+# host_vars/<node>.yml must define: node_serial, nfs_fsid
 
 - name: Create per-node overlay directories
   ansible.builtin.file:

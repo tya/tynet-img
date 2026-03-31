@@ -3,14 +3,10 @@
 
 # Shared read-only base image (all provisioned nodes)
 {% for node in groups['nodes'] %}
-{% if hostvars[node].node_ip | default('TODO') != 'TODO' %}
-/exports/netboot/ubuntu-26.04 {{ hostvars[node].node_ip }}(ro,sync,no_subtree_check,no_root_squash,fsid=0)
-{% endif %}
+/exports/netboot/ubuntu-26.04 {{ subnet }}(ro,sync,no_subtree_check,no_root_squash,fsid=0)
 {% endfor %}
 
 # Per-node writable overlay state store
 {% for node in groups['nodes'] %}
-{% if hostvars[node].node_ip | default('TODO') != 'TODO' %}
-/exports/overlay/{{ hostvars[node].inventory_hostname_short }} {{ hostvars[node].node_ip }}(rw,sync,no_subtree_check,no_root_squash,fsid={{ hostvars[node].nfs_fsid }})
-{% endif %}
+/exports/overlay/{{ hostvars[node].inventory_hostname_short }} {{ subnet }}(rw,sync,no_subtree_check,no_root_squash,fsid={{ hostvars[node].nfs_fsid }})
 {% endfor %}
