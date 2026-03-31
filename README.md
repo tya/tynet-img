@@ -21,7 +21,7 @@ All services are hosted on the kickstart host (`kickstart.tynet.us`, `10.0.60.10
 
 - **Kickstart host**: `kickstart.tynet.us` — Raspberry Pi aarch64, DHCP reservation `10.0.60.100`
 - **Pi VLAN**: `10.0.60.0/24`, gateway `10.0.60.1`
-- **Pi nodes**: pi1–pi4, DHCP reservations `10.0.60.201`–`10.0.60.204` (managed in Unifi)
+- **Pi nodes**: pi1–pi3, DHCP reservations `10.0.60.201`–`10.0.60.203` (managed in Unifi)
 - **UniFi Network Boot**: set to `10.0.60.100` on VLAN 60 (DHCP option 66)
 
 ## Overlay filesystem
@@ -168,7 +168,7 @@ Both use the same Ansible playbook (`ansible/playbooks/kickstart.yml`) with diff
 
 ```
 ansible/
-  inventory.ini        # production: kickstart.tynet.us + pi1-pi4
+  inventory.ini        # production: kickstart.tynet.us + pi1-pi3
   inventory-vm.ini     # VM test environment: lima-kickstart + testnode
   group_vars/all.yml   # shared vars (subnet)
   host_vars/           # per-node config (node_serial, nfs_fsid)

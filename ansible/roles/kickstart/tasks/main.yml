@@ -171,7 +171,6 @@
   loop: "{{ groups['nodes'] }}"
   loop_control:
     loop_var: node
-  when: hostvars[node].node_serial | default('TODO') != 'TODO'
 
 - name: Check base image boot directory exists
   ansible.builtin.stat:
@@ -190,7 +189,7 @@
   loop: "{{ groups['nodes'] }}"
   loop_control:
     loop_var: node
-  when: kickstart_base_boot.stat.exists and hostvars[node].node_serial | default('TODO') != 'TODO'
+  when: kickstart_base_boot.stat.exists
   changed_when: false
 
 - name: Make boot files world-readable for tftpd
@@ -211,7 +210,7 @@
   loop: "{{ groups['nodes'] }}"
   loop_control:
     loop_var: node
-  when: kickstart_base_boot.stat.exists and hostvars[node].node_serial | default('TODO') != 'TODO'
+  when: kickstart_base_boot.stat.exists
   notify: Restart tftpd-hpa
 
 - name: Install update-base systemd service

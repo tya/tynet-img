@@ -49,7 +49,7 @@ make pi3
 ## Network
 
 - **Kickstart host**: `kickstart.tynet.us`, DHCP reservation `10.0.60.100`
-- **Pi nodes**: pi1–pi4, DHCP reservations `10.0.60.201`–`10.0.60.204` (managed in Unifi)
+- **Pi nodes**: pi1–pi3, DHCP reservations `10.0.60.201`–`10.0.60.203` (managed in Unifi)
 - **Subnet**: `10.0.60.0/24`, gateway `10.0.60.1`
 - Node IPs are NOT hardcoded in cloud-init — managed as Unifi DHCP reservations
 
@@ -109,4 +109,3 @@ Systemd service that runs before halt/reboot/shutdown. Rsyncs the live tmpfs upp
 | pi1.tynet.us      | ad36c642 | —                 | 10.0.60.201          |
 | pi2.tynet.us      | 244634d3 | dc:a6:32:8d:f3:ca | 10.0.60.202          |
 | pi3.tynet.us      | a43386be | dc:a6:32:80:2a:cc | 10.0.60.203          |
-| pi4.tynet.us      | TODO     | —                 | 10.0.60.204          |
