@@ -2,24 +2,6 @@
 # Kickstart host: TFTP, NFS, cloud-init service, and per-node export setup.
 # customize-img handles image extraction/customization only; server config lives here.
 
-- name: Create ty user
-  ansible.builtin.user:
-    name: ty
-    groups: adm,sudo
-    shell: /bin/bash
-    create_home: true
-
-- name: Set ty user authorized SSH key
-  ansible.posix.authorized_key:
-    user: ty
-    key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG"
-
-- name: Grant ty passwordless sudo
-  ansible.builtin.copy:
-    dest: /etc/sudoers.d/ty
-    content: "ty ALL=(ALL) NOPASSWD:ALL\n"
-    mode: '0440'
-
 - name: Install kickstart packages
   ansible.builtin.apt:
     name:
