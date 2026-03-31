@@ -119,20 +119,13 @@
     mode: '0600'
   become: false
 
-- name: Check if tynet-img repo already exists
-  ansible.builtin.stat:
-    path: "{{ repo_dir }}/.git"
-  register: kickstart_repo_git
-  become: false
-
-- name: Clone tynet-img repo
+- name: Clone or pull tynet-img repo
   ansible.builtin.git:
     repo: git@github.com:tya/tynet-img.git
     dest: "{{ repo_dir }}"
     version: main
     update: true
   become: false
-  when: not kickstart_repo_git.stat.exists
 
 - name: Build serve-cloud-init binary
   ansible.builtin.command:
