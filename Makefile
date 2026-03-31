@@ -4,7 +4,7 @@ BASE_IMG      = /exports/netboot/ubuntu-26.04
 OVERLAY_DIR   = /exports/overlay
 KICKSTART_IP  = 10.0.60.10
 
-.PHONY: help build build-linux test clean provision-kickstart \
+.PHONY: help build build-linux test clean kickstart \
         update-base wipe-overlay-% wipe-all-overlays reboot-nodes \
         pi2 pi3
 
@@ -20,7 +20,7 @@ help:
 	@echo "  clean                  remove built binary"
 	@echo ""
 	@echo "Provisioning:"
-	@echo "  provision-kickstart    run Ansible against the production kickstart host"
+	@echo "  kickstart              run Ansible against the production kickstart host"
 	@echo ""
 	@echo "Image build (run on kickstart host):"
 	@echo "  pi2                    build netboot image for pi2.tynet.us"
@@ -50,7 +50,7 @@ pi2:
 pi3:
 	sudo ./customize-img $(KICKSTART_IP) a43386be pi3.tynet.us
 
-provision-kickstart:
+kickstart:
 	cd ansible && ansible-playbook playbooks/kickstart.yml
 
 

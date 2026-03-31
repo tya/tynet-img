@@ -156,7 +156,7 @@ brew install ansible
 
 **Provision production (`kickstart.tynet.us`):**
 ```bash
-make provision-kickstart
+make kickstart
 ```
 
 **Provision the local VM kickstart (test env only):**
@@ -225,7 +225,7 @@ The kickstart host also runs an `update-base.timer` systemd unit that applies up
 # 3. Add DHCP reservation in Unifi for the node's MAC → desired IP
 
 # 4. Provision the kickstart host (creates NFS exports + TFTP dirs)
-make provision-kickstart
+make kickstart
 
 # 5. On the kickstart host: build the netboot image
 make pi2   # or pi3, etc.
@@ -244,7 +244,7 @@ setup/kickstart/
   network-config  # DHCP on eth0
 ```
 
-Flash Ubuntu to an SD card with Raspberry Pi Imager, then copy these files to the boot partition (`/boot/firmware/`) before first boot. After boot, run `make provision-kickstart`.
+Flash Ubuntu to an SD card with Raspberry Pi Imager, then copy these files to the boot partition (`/boot/firmware/`) before first boot. After boot, run `make kickstart`.
 
 ## Local VM test environment
 
