@@ -2,7 +2,7 @@ BINARY        = serve-cloud-init
 CMD_DIR       = serve-cloud-init
 BASE_IMG      = /exports/netboot/ubuntu-26.04
 OVERLAY_DIR   = /exports/overlay
-KICKSTART_IP  = 10.0.60.10
+KICKSTART_IP  = 10.0.60.100
 
 .PHONY: help build build-linux test clean kickstart \
         update-base wipe-overlay-% wipe-all-overlays reboot-nodes \

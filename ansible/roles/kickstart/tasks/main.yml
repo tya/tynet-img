@@ -197,6 +197,46 @@
   changed_when: true
   notify: Restart tftpd-hpa
 
+# Per-node cmdline.txt: each node needs its own cmdline.txt with the correct
+# kickstart IP, overlay_host (short hostname), and serial. Since all TFTP dirs
+# are bind-mounted from the shared boot dir, we write per-node cmdline.txt
+# files to a staging area and bind-mount each one over the shared cmdline.txt.
+- name: Create staging directory for per-node cmdline.txt files
+  ansible.builtin.file:
+    path: "/etc/tftpboot-cmdline/{{ hostvars[node].node_serial }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop: "{{ groups['nodes'] }}"
+  loop_control:
+    loop_var: node
+  when: hostvars[node].node_serial | default('TODO') != 'TODO'
+
+- name: Write per-node cmdline.txt to staging area
+  ansible.builtin.template:
+    src: cmdline.txt.j2
+    dest: "/etc/tftpboot-cmdline/{{ hostvars[node].node_serial }}/cmdline.txt"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ groups['nodes'] }}"
+  loop_control:
+    loop_var: node
+  when: hostvars[node].node_serial | default('TODO') != 'TODO'
+
+- name: Bind-mount per-node cmdline.txt over shared boot dir's cmdline.txt
+  ansible.posix.mount:
+    path: "/srv/tftpboot/{{ hostvars[node].node_serial }}/cmdline.txt"
+    src: "/etc/tftpboot-cmdline/{{ hostvars[node].node_serial }}/cmdline.txt"
+    fstype: none
+    opts: bind
+    state: mounted
+  loop: "{{ groups['nodes'] }}"
+  loop_control:
+    loop_var: node
+  when: kickstart_base_boot.stat.exists and hostvars[node].node_serial | default('TODO') != 'TODO'
+
 - name: Install update-base systemd service
   ansible.builtin.template:
     src: update-base.service.j2
