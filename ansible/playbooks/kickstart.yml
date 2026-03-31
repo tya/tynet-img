@@ -1,5 +1,5 @@
 ---
-# Configure the kickstart host (vpn.tynet.us).
+# Configure the kickstart host (kickstart.tynet.us).
 # Sets up TFTP, NFS, and the cloud-init HTTP service.
 # Replaces the configure-tftp shell script.
 #
@@ -9,5 +9,6 @@
 - name: Configure kickstart host
   hosts: kickstart
   become: true
+  gather_facts: false
   roles:
     - kickstart
