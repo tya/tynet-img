@@ -22,7 +22,6 @@ apt:
 packages:
   - avahi-daemon
 
-enable_ssh: true
 ssh_pwauth: false
 
 users:
@@ -35,19 +34,3 @@ users:
     ssh_authorized_keys:
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEA9fmxTmPKwxfGw4WJtnJhGI+S1LxTe41sR3rKnZ1LC ty.alexander@gmail.com"
       - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG"
-
-network:
-  version: 2
-  ethernets:
-    eth0:
-      dhcp4: false
-      addresses:
-        - 10.0.60.100/24
-      routes:
-        - to: default
-          via: 10.0.60.1
-      nameservers:
-        addresses:
-          - 10.0.60.1
-          - 1.1.1.1
-          - 1.0.0.1
