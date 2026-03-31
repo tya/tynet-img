@@ -162,9 +162,16 @@
   notify: Reload NFS exports
 
 - name: Create per-node TFTP directories
-  ansible.builtin.command:
-    cmd: mkdir -p {{ groups['nodes'] | map('extract', hostvars) | selectattr('node_serial', 'defined') | rejectattr('node_serial', 'equalto', 'TODO') | map(attribute='node_serial') | map('regex_replace', '^(.*)$', '/srv/tftpboot/\\1') | join(' ') }}
-  changed_when: false
+  ansible.builtin.file:
+    path: "/srv/tftpboot/{{ hostvars[node].node_serial }}"
+    state: directory
+    owner: tftp
+    group: tftp
+    mode: '0755'
+  loop: "{{ groups['nodes'] }}"
+  loop_control:
+    loop_var: node
+  when: hostvars[node].node_serial | default('TODO') != 'TODO'
 
 - name: Check base image boot directory exists
   ansible.builtin.stat:
