@@ -91,9 +91,6 @@ EOF
 # works reliably for both native and cross-arch builds.
 function rebuild_initramfs {
   local root_dir=${1}
-  local host_arch
-  host_arch=$(uname -m)
-  local qemu_bin=/usr/bin/qemu-aarch64-static
 
   # systemd-nspawn requires /dev to be a pre-mounted filesystem, not a
   # populated directory on the same fs as root. Unmount any leftover mounts
@@ -103,15 +100,6 @@ function rebuild_initramfs {
   umount -lf "${root_dir}/dev" 2>/dev/null || true
   mount -t tmpfs tmpfs "${root_dir}/dev"
   trap 'umount -lf "${root_dir}/dev" 2>/dev/null || true' RETURN
-
-  # Cross-arch: install qemu static binary so aarch64 binaries run on x86_64
-  if [ "${host_arch}" != "aarch64" ]; then
-    if [ ! -f "${qemu_bin}" ]; then
-      apt-get install -y qemu-user-static > /dev/null
-    fi
-    cp "${qemu_bin}" "${root_dir}/usr/bin/"
-    trap 'rm -f "${root_dir}/usr/bin/qemu-aarch64-static"' RETURN
-  fi
 
   DEBIAN_FRONTEND=noninteractive \
     systemd-nspawn -D "${root_dir}" update-initramfs -u -k all
