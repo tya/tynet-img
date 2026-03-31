@@ -6,5 +6,5 @@
 
 # Per-node writable overlay state store
 {% for node in groups['nodes'] %}
-/exports/overlay/{{ hostvars[node].inventory_hostname_short }} {{ subnet }}(rw,sync,no_subtree_check,no_root_squash,fsid={{ hostvars[node].nfs_fsid }})
+/exports/overlay/{{ node }} {{ subnet }}(rw,sync,no_subtree_check,no_root_squash,fsid={{ hostvars[node].nfs_fsid }})
 {% endfor %}
