@@ -60,7 +60,8 @@ function install {
   local dst=${2}
 
   mkdir -p "${dst}"
-  rsync -a --checksum --no-devices --no-specials "${src}/" "${dst}/" >&2
+  # exit 23 = partial transfer (expected for special files in OS images) — treat as success
+  rsync -a --checksum --no-devices --no-specials "${src}/" "${dst}/" >&2 || { rc=$?; [ "${rc}" -eq 23 ] || exit "${rc}"; }
 }
 
 ##
