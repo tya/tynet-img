@@ -178,64 +178,41 @@
     path: /exports/netboot/ubuntu-26.04/boot
   register: kickstart_base_boot
 
-- name: Bind-mount boot partition into TFTP directory
-  ansible.posix.mount:
-    path: "/srv/tftpboot/{{ hostvars[node].node_serial }}"
-    src: /exports/netboot/ubuntu-26.04/boot
-    fstype: none
-    opts: defaults,bind
-    state: mounted
+# Sync shared boot files (kernel, initramfs, etc.) to each per-node TFTP dir,
+# excluding cmdline.txt which is written separately per-node below.
+# rsync --update skips files that haven't changed, so re-runs are fast.
+- name: Sync boot files to per-node TFTP directory
+  ansible.builtin.command:
+    cmd: >
+      rsync -a --update --exclude=cmdline.txt
+      /exports/netboot/ubuntu-26.04/boot/
+      /srv/tftpboot/{{ hostvars[node].node_serial }}/
   loop: "{{ groups['nodes'] }}"
   loop_control:
     loop_var: node
   when: kickstart_base_boot.stat.exists and hostvars[node].node_serial | default('TODO') != 'TODO'
-  notify: Restart tftpd-hpa
+  changed_when: false
 
 - name: Make boot files world-readable for tftpd
-  ansible.builtin.command: chmod -R a+r /exports/netboot/ubuntu-26.04/boot
+  ansible.builtin.command: chmod -R a+r /srv/tftpboot
   when: kickstart_base_boot.stat.exists
   changed_when: true
   notify: Restart tftpd-hpa
 
-# Per-node cmdline.txt: each node needs its own cmdline.txt with the correct
-# kickstart IP, overlay_host (short hostname), and serial. Since all TFTP dirs
-# are bind-mounted from the shared boot dir, we write per-node cmdline.txt
-# files to a staging area and bind-mount each one over the shared cmdline.txt.
-- name: Create staging directory for per-node cmdline.txt files
-  ansible.builtin.file:
-    path: "/etc/tftpboot-cmdline/{{ hostvars[node].node_serial }}"
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-  loop: "{{ groups['nodes'] }}"
-  loop_control:
-    loop_var: node
-  when: hostvars[node].node_serial | default('TODO') != 'TODO'
-
-- name: Write per-node cmdline.txt to staging area
-  ansible.builtin.template:
-    src: cmdline.txt.j2
-    dest: "/etc/tftpboot-cmdline/{{ hostvars[node].node_serial }}/cmdline.txt"
+# Write per-node cmdline.txt directly into each TFTP dir.
+# overlay_host must be the short hostname since NFS exports use short names.
+- name: Write per-node cmdline.txt
+  ansible.builtin.copy:
+    content: "console=serial0,115200 console=tty1 root=/dev/nfs nfsroot={{ kickstart_ip }}:/exports/netboot/ubuntu-26.04,vers=3 ro ip=dhcp rootwait overlay_host={{ node | regex_replace('\\..*$', '') }} ds=nocloud;s=http://{{ kickstart_ip }}:8000/{{ hostvars[node].node_serial }}/\n"
+    dest: "/srv/tftpboot/{{ hostvars[node].node_serial }}/cmdline.txt"
     owner: root
     group: root
     mode: '0644'
   loop: "{{ groups['nodes'] }}"
   loop_control:
     loop_var: node
-  when: hostvars[node].node_serial | default('TODO') != 'TODO'
-
-- name: Bind-mount per-node cmdline.txt over shared boot dir's cmdline.txt
-  ansible.posix.mount:
-    path: "/srv/tftpboot/{{ hostvars[node].node_serial }}/cmdline.txt"
-    src: "/etc/tftpboot-cmdline/{{ hostvars[node].node_serial }}/cmdline.txt"
-    fstype: none
-    opts: bind
-    state: mounted
-  loop: "{{ groups['nodes'] }}"
-  loop_control:
-    loop_var: node
   when: kickstart_base_boot.stat.exists and hostvars[node].node_serial | default('TODO') != 'TODO'
+  notify: Restart tftpd-hpa
 
 - name: Install update-base systemd service
   ansible.builtin.template:
