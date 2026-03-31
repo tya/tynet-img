@@ -98,6 +98,27 @@
     enabled: true
     state: started
 
+- name: Install GitHub deploy key
+  ansible.builtin.copy:
+    src: "~/.ssh/github"
+    dest: "/home/ty/.ssh/github"
+    owner: ty
+    group: ty
+    mode: '0600'
+  become: false
+
+- name: Configure SSH to use deploy key for github.com
+  ansible.builtin.copy:
+    dest: "/home/ty/.ssh/config"
+    content: |
+      Host github.com
+        IdentityFile ~/.ssh/github
+        StrictHostKeyChecking accept-new
+    owner: ty
+    group: ty
+    mode: '0600'
+  become: false
+
 - name: Check if tynet-img repo already exists
   ansible.builtin.stat:
     path: "{{ repo_dir }}/.git"
@@ -106,7 +127,7 @@
 
 - name: Clone tynet-img repo
   ansible.builtin.git:
-    repo: https://github.com/tya/tynet-img.git
+    repo: git@github.com:tya/tynet-img.git
     dest: "{{ repo_dir }}"
     version: main
     update: true
