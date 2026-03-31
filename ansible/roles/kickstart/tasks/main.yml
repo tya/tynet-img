@@ -149,7 +149,7 @@
 
 - name: Create per-node overlay directories
   ansible.builtin.command:
-    cmd: mkdir -p {{ groups['nodes'] | map('extract', hostvars, 'inventory_hostname_short') | map('regex_replace', '^(.*)$', '/exports/overlay/\\1/upper /exports/overlay/\\1/work') | join(' ') }}
+    cmd: mkdir -p {{ groups['nodes'] | map('regex_replace', '\\..*$', '') | map('regex_replace', '^(.*)$', '/exports/overlay/\\1/upper /exports/overlay/\\1/work') | join(' ') }}
   changed_when: false
 
 - name: Write /etc/exports from template
