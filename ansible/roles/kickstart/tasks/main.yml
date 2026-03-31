@@ -20,6 +20,7 @@
       - ansible
     state: present
     update_cache: true
+    cache_valid_time: 3600
 
 - name: Create TFTP root directory
   ansible.builtin.file:
@@ -109,12 +110,22 @@
     update: true
   become: false
 
+- name: Check if serve-cloud-init binary is up to date
+  ansible.builtin.command:
+    cmd: make -q build
+    chdir: "{{ repo_dir }}"
+  become: false
+  register: serve_cloud_init_build_check
+  changed_when: false
+  failed_when: serve_cloud_init_build_check.rc not in [0, 1]
+
 - name: Build serve-cloud-init binary
   ansible.builtin.command:
     cmd: make build
     chdir: "{{ repo_dir }}"
   become: false
-  changed_when: false
+  changed_when: true
+  when: serve_cloud_init_build_check.rc == 1
 
 - name: Install serve-cloud-init systemd service
   ansible.builtin.template:
