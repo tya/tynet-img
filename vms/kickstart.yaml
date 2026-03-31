@@ -32,12 +32,9 @@ mounts:
   - location: "~/src/tynet-img/tmp/cache"
     mountPoint: /var/cache/img
     writable: true
-  - location: "~/src/tynet-img/tmp/exports"
-    mountPoint: /exports/netboot
-    writable: true
-  # /exports/overlay intentionally NOT virtiofs-mounted: virtiofs doesn't support
-  # stable NFS file handles, breaking NFS re-export. Overlay lives on the VM's
-  # local disk instead. Data is not persisted to the Mac between VM restarts.
+  # /exports/netboot and /exports/overlay live on the VM's local disk.
+  # virtiofs doesn't support stable NFS file handles needed for NFS re-export,
+  # and export data doesn't need to persist to the Mac between VM restarts.
 
 networks:
   - lima: shared

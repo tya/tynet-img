@@ -1,10 +1,12 @@
-BINARY      = serve-cloud-init
-CMD_DIR     = serve-cloud-init
-BASE_IMG    = /exports/netboot/ubuntu-26.04
-OVERLAY_DIR = /exports/overlay
+BINARY        = serve-cloud-init
+CMD_DIR       = serve-cloud-init
+BASE_IMG      = /exports/netboot/ubuntu-26.04
+OVERLAY_DIR   = /exports/overlay
+KICKSTART_IP  = 10.0.60.10
 
 .PHONY: help build build-linux test clean provision-kickstart \
-        update-base wipe-overlay-% wipe-all-overlays reboot-nodes
+        update-base wipe-overlay-% wipe-all-overlays reboot-nodes \
+        pi2 pi3
 
 .DEFAULT_GOAL := help
 
@@ -19,6 +21,10 @@ help:
 	@echo ""
 	@echo "Provisioning:"
 	@echo "  provision-kickstart    run Ansible against the production kickstart host"
+	@echo ""
+	@echo "Image build (run on kickstart host):"
+	@echo "  pi2                    build netboot image for pi2.tynet.us"
+	@echo "  pi3                    build netboot image for pi3.tynet.us"
 	@echo ""
 	@echo "Maintenance (run on kickstart host):"
 	@echo "  update-base            apply security patches to the shared base image"
@@ -37,6 +43,12 @@ test:
 
 clean:
 	rm -f $(BINARY)
+
+pi2:
+	sudo ./customize-img $(KICKSTART_IP) 244634d3 pi2.tynet.us
+
+pi3:
+	sudo ./customize-img $(KICKSTART_IP) a43386be pi3.tynet.us
 
 provision-kickstart:
 	cd ansible && ansible-playbook playbooks/kickstart.yml

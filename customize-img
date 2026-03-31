@@ -102,7 +102,7 @@ function rebuild_initramfs {
     | sort -r | xargs -r umount -lf 2>/dev/null || true
   umount -lf "${root_dir}/dev" 2>/dev/null || true
   mount -t tmpfs tmpfs "${root_dir}/dev"
-  trap 'umount -lf "${root_dir}/dev"' RETURN
+  trap 'umount -lf "${root_dir}/dev" 2>/dev/null || true' RETURN
 
   # Cross-arch: install qemu static binary so aarch64 binaries run on x86_64
   if [ "${host_arch}" != "aarch64" ]; then

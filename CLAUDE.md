@@ -29,6 +29,8 @@ tmp/                   # gitignored local runtime artifacts (cache, exports)
 
 All scripts require `sudo` / root. They must be run on the Linux server acting as the netboot host (not macOS).
 
+The Lima VM environment (`vms/`) is a **test environment only**. Production image builds and serving run on vpn.tynet.us (armv7l).
+
 ```bash
 # Extract and customize an image for netboot
 sudo ./customize-img [kickstart_ip] [serial] [hostname]
@@ -43,6 +45,10 @@ sudo ./extract-img [url] [destination_dir]
 - `systemd-container`, `qemu-user-static` — for cross-arch initramfs rebuild via `systemd-nspawn`
 - `nfs-server`, `rpcbind`, `tftpd-hpa` — for serving (managed by Ansible)
 - Ubuntu ARM64 preinstalled server images from `cdimage.ubuntu.com`
+
+## Network
+
+- Kickstart host IP: `10.0.60.10` (vpn.tynet.us) — used as `kickstart_ip` in `customize-img`
 
 ## Key design details
 

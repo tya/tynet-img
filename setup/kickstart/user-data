@@ -1,8 +1,9 @@
 #cloud-config
-# pi3.tynet.us — HA control plane node
-# After this node boots, run 'microk8s add-node' on pi2 and execute the
-# resulting join command on this node:
-#   microk8s join <pi2-ip>:25000/<token>
+# kickstart.tynet.us — netboot kickstart server
+# Flash to SD card via Raspberry Pi Imager, then run Ansible to provision services.
+
+hostname: kickstart
+fqdn: kickstart.tynet.us
 
 users:
   - name: ty
@@ -19,7 +20,7 @@ network:
     eth0:
       dhcp4: false
       addresses:
-        - 10.0.60.203/24
+        - 10.0.60.100/24
       routes:
         - to: default
           via: 10.0.60.1
@@ -28,8 +29,3 @@ network:
           - 10.0.60.1
           - 1.1.1.1
           - 1.0.0.1
-
-runcmd:
-  - snap install microk8s --classic --channel=1.32/stable
-  - usermod -aG microk8s ty
-  - microk8s status --wait-ready --timeout 300

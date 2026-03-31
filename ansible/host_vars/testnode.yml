@@ -1,4 +1,4 @@
 ---
 node_serial: testnode
 node_ip: 192.168.105.0/24
-nfs_fsid: 6
+nfs_fsid: 5

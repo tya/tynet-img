@@ -1,4 +1,4 @@
 ---
-node_serial: TODO
-node_ip: TODO  # e.g. 10.0.10.11
-nfs_fsid: 2
+node_serial: ad36c642
+node_ip: 10.0.60.201
+nfs_fsid: 1

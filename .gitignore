@@ -1,2 +1,4 @@
 /serve-cloud-init
+!/serve-cloud-init/
+/serve-cloud-init/tynet-img
 tmp/

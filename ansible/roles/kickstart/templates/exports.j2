@@ -4,7 +4,7 @@
 # Shared read-only base image (all provisioned nodes)
 {% for node in groups['nodes'] %}
 {% if hostvars[node].node_ip | default('TODO') != 'TODO' %}
-/exports/netboot/ubuntu-26.04 {{ hostvars[node].node_ip }}(ro,sync,no_subtree_check,no_root_squash,fsid=1)
+/exports/netboot/ubuntu-26.04 {{ hostvars[node].node_ip }}(ro,sync,no_subtree_check,no_root_squash,fsid=0)
 {% endif %}
 {% endfor %}
 

@@ -55,6 +55,14 @@
     group: root
     mode: '0755'
 
+- name: Create base image netboot directory
+  ansible.builtin.file:
+    path: /exports/netboot/ubuntu-26.04
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Create NFS overlay export directory
   ansible.builtin.file:
     path: /exports/overlay

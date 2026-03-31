@@ -1,5 +1,5 @@
 #cloud-config
-# pi3.tynet.us — HA control plane node
+# pi1.tynet.us — MicroK8s worker node
 # After this node boots, run 'microk8s add-node' on pi2 and execute the
 # resulting join command on this node:
 #   microk8s join <pi2-ip>:25000/<token>
@@ -19,7 +19,7 @@ network:
     eth0:
       dhcp4: false
       addresses:
-        - 10.0.60.203/24
+        - 10.0.60.201/24
       routes:
         - to: default
           via: 10.0.60.1
