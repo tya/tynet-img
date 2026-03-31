@@ -6,7 +6,7 @@ KICKSTART_IP  = 10.0.60.10
 
 .PHONY: help build build-linux test clean kickstart \
         update-base wipe-overlay-% wipe-all-overlays reboot-nodes \
-        pi2 pi3
+        pi1 pi2 pi3 pi
 
 .DEFAULT_GOAL := help
 
@@ -23,8 +23,10 @@ help:
 	@echo "  kickstart              run Ansible against the production kickstart host"
 	@echo ""
 	@echo "Image build (run on kickstart host):"
+	@echo "  pi1                    build netboot image for pi1.tynet.us"
 	@echo "  pi2                    build netboot image for pi2.tynet.us"
 	@echo "  pi3                    build netboot image for pi3.tynet.us"
+	@echo "  pi                     build netboot images for all nodes"
 	@echo ""
 	@echo "Maintenance (run on kickstart host):"
 	@echo "  update-base            apply security patches to the shared base image"
@@ -44,11 +46,16 @@ test:
 clean:
 	rm -f $(BINARY)
 
+pi1:
+	sudo ./customize-img $(KICKSTART_IP) ad36c642 pi1.tynet.us
+
 pi2:
 	sudo ./customize-img $(KICKSTART_IP) 244634d3 pi2.tynet.us
 
 pi3:
 	sudo ./customize-img $(KICKSTART_IP) a43386be pi3.tynet.us
+
+pi: pi1 pi2 pi3
 
 kickstart:
 	cd ansible && ansible-playbook playbooks/kickstart.yml
