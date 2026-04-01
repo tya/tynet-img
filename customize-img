@@ -101,6 +101,11 @@ function rebuild_initramfs {
   mount -t tmpfs tmpfs "${root_dir}/dev"
   trap 'umount -lf "${root_dir}/dev" 2>/dev/null || true' RETURN
 
+  # genet: Pi 4 built-in Gigabit Ethernet (BCM2711 GENET controller).
+  # Without this the initramfs has no network and ip=dhcp fails, so NFS root
+  # never mounts.
+  echo genet >> "${root_dir}/etc/initramfs-tools/modules"
+
   DEBIAN_FRONTEND=noninteractive \
     systemd-nspawn --bind-ro=/etc/resolv.conf -D "${root_dir}" \
     bash -c 'apt-get install -y nfs-common && update-initramfs -u -k all'
