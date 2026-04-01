@@ -34,7 +34,10 @@ function customize_boot {
   local root_dir=${5}
 
   # cmdline.txt - ro NFS root + overlay_host for per-node overlayfs
-  local cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${ip}:${root_dir},vers=3 ro ip=dhcp rootwait overlay_host=${hostname} ds=nocloud;s=http://${ip}:8000/${serial}/"
+  # rd.driver.pre=genet: Ubuntu 26.04 uses a dracut-based initramfs; the Pi 4
+  # GENET Ethernet driver is not auto-detected inside nspawn so it must be
+  # pre-loaded explicitly before dracut's network init runs.
+  local cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${ip}:${root_dir},vers=3 ro ip=dhcp rootwait rd.driver.pre=genet overlay_host=${hostname} ds=nocloud;s=http://${ip}:8000/${serial}/"
   echo "${cmdline}" > "${boot_dir}/cmdline.txt"
 }
 
