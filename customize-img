@@ -102,9 +102,31 @@ function rebuild_initramfs {
   trap 'umount -lf "${root_dir}/dev" 2>/dev/null || true' RETURN
 
   # genet: Pi 4 built-in Gigabit Ethernet (BCM2711 GENET controller).
-  # Without this the initramfs has no network and ip=dhcp fails, so NFS root
-  # never mounts.
-  echo genet >> "${root_dir}/etc/initramfs-tools/modules"
+  # A hook is required because update-initramfs ignores /etc/initramfs-tools/modules
+  # entries for modules it can't associate with detected hardware (nspawn has no
+  # real hardware). The hook calls manual_add_modules which both copies genet.ko
+  # into the initramfs AND appends it to conf/modules so load_modules loads it.
+  # The init-premount script is a belt-and-suspenders load at runtime.
+  mkdir -p "${root_dir}/etc/initramfs-tools/hooks"
+  cat > "${root_dir}/etc/initramfs-tools/hooks/genet-netboot" << 'HOOK'
+#!/bin/sh
+PREREQS=""
+prereqs() { echo "$PREREQS"; }
+case $1 in prereqs) prereqs; exit 0;; esac
+. /usr/share/initramfs-tools/hook-functions
+manual_add_modules genet
+HOOK
+  chmod +x "${root_dir}/etc/initramfs-tools/hooks/genet-netboot"
+
+  mkdir -p "${root_dir}/etc/initramfs-tools/scripts/init-premount"
+  cat > "${root_dir}/etc/initramfs-tools/scripts/init-premount/genet-netboot" << 'SCRIPT'
+#!/bin/sh
+PREREQS=""
+prereqs() { echo "$PREREQS"; }
+case $1 in prereqs) prereqs; exit 0;; esac
+modprobe genet 2>/dev/null || true
+SCRIPT
+  chmod +x "${root_dir}/etc/initramfs-tools/scripts/init-premount/genet-netboot"
 
   DEBIAN_FRONTEND=noninteractive \
     systemd-nspawn --bind-ro=/etc/resolv.conf -D "${root_dir}" \
