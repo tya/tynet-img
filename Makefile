@@ -4,7 +4,7 @@ BASE_IMG      = /exports/netboot/ubuntu-22.04
 OVERLAY_DIR   = /exports/overlay
 KICKSTART_IP  = 10.0.60.100
 
-.PHONY: help build build-linux test clean kickstart \
+.PHONY: help build build-linux test clean kickstart provision \
         update-base wipe-overlay-% wipe-all-overlays reboot-nodes \
         pi1 pi2 pi3 pi
 
@@ -20,7 +20,8 @@ help:
 	@echo "  clean                  remove built binary"
 	@echo ""
 	@echo "Provisioning:"
-	@echo "  kickstart              run Ansible against the production kickstart host"
+	@echo "  kickstart              run Ansible from Mac against kickstart host"
+	@echo "  provision              run Ansible from kickstart itself (no SSH needed)"
 	@echo ""
 	@echo "Image build (run on kickstart host):"
 	@echo "  pi1                    build netboot image for pi1.tynet.us"
@@ -59,6 +60,10 @@ pi: pi1 pi2 pi3
 
 kickstart:
 	cd ansible && ansible-playbook playbooks/kickstart.yml
+
+# Run from kickstart itself (uses local connection, no SSH needed)
+provision:
+	cd ansible && ansible-playbook -i inventory-local.ini playbooks/kickstart.yml
 
 
 # Update the shared base image with security patches.

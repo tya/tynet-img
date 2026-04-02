@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
-# check-netboot — show recent TFTP and NFS activity on kickstart
-# Usage: ./check-netboot [--since "N minutes ago"] [--follow]
-#
-# Runs locally (SSHes to kickstart) or directly on kickstart itself.
+# check-netboot — show recent TFTP and NFS activity
+# Run on kickstart. Usage: ./check-netboot [--since "N minutes ago"] [--follow]
 
 set -euo pipefail
 
-KICKSTART=kickstart.tynet.us
 SINCE="5 minutes ago"
 FOLLOW=false
 
@@ -18,27 +15,18 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Run a command on kickstart, or locally if already there.
-run() {
-  if [[ "$(hostname -s)" == "kickstart" ]]; then
-    bash -c "$1"
-  else
-    ssh "$KICKSTART" "$1"
-  fi
-}
-
 if $FOLLOW; then
-  echo "Following TFTP and NFS logs on $KICKSTART (Ctrl-C to stop)..."
+  echo "Following TFTP and NFS logs (Ctrl-C to stop)..."
   echo ""
-  run "sudo journalctl -f -u tftpd-hpa -u nfs-server -k 2>/dev/null \
-    | grep --line-buffered -E 'tftpd|nfs|NFS|mount'"
+  journalctl -f -u tftpd-hpa -u nfs-server -k 2>/dev/null \
+    | grep --line-buffered -E 'tftpd|nfs|NFS|mount'
   exit 0
 fi
 
 echo "=== TFTP downloads (since: $SINCE) ==="
-TFTP=$(run "journalctl -u tftpd-hpa --since '$SINCE' --no-pager 2>/dev/null \
+TFTP=$(journalctl -u tftpd-hpa --since "$SINCE" --no-pager 2>/dev/null \
   | grep RRQ \
-  | awk '{print \$1, \$2, \$3, \$8, \$10}'" 2>/dev/null)
+  | awk '{print $1, $2, $3, $8, $10}')
 if [[ -z "$TFTP" ]]; then
   echo "  (none)"
 else
@@ -51,8 +39,8 @@ fi
 
 echo ""
 echo "=== NFS mounts (since: $SINCE) ==="
-NFS_LOG=$(run "journalctl -k --since '$SINCE' --no-pager 2>/dev/null \
-  | grep -i 'nfs\|mount' || true" 2>/dev/null)
+NFS_LOG=$(journalctl -k --since "$SINCE" --no-pager 2>/dev/null \
+  | grep -i 'nfs\|mount' || true)
 if [[ -z "$NFS_LOG" ]]; then
   echo "  (none in kernel log)"
 else
@@ -61,7 +49,7 @@ fi
 
 echo ""
 echo "=== Current NFS clients ==="
-MOUNTS=$(run "showmount -a 2>/dev/null" 2>/dev/null)
+MOUNTS=$(showmount -a 2>/dev/null)
 if [[ "$MOUNTS" == *"mount points"* ]] && ! echo "$MOUNTS" | grep -qv "mount points"; then
   echo "  (none)"
 else
