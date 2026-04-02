@@ -2,6 +2,11 @@
 set -Eeuo pipefail
 
 ################################################################################
+# logging
+################################################################################
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
+
+################################################################################
 # functions
 ################################################################################
 ##
@@ -16,7 +21,15 @@ function download-img {
   local img
   img=/var/cache/img/$(basename "${url}" .xz)
   mkdir -p "$(dirname "${img}")"
-  [ ! -f "${img}" ] && wget -O "${img}.xz" "${url}" && unxz "${img}.xz"
+  if [ ! -f "${img}" ]; then
+    log "download-img: downloading ${url}"
+    wget -O "${img}.xz" "${url}"
+    log "download-img: decompressing"
+    unxz "${img}.xz"
+    log "download-img: done → ${img}"
+  else
+    log "download-img: cache hit → ${img}"
+  fi
   echo "${img}"
 }
 
@@ -71,17 +84,22 @@ function extract-img {
   dst=${2:-"/exports/netboot/$(basename "${url}" .img.xz | cut -f1,2 -d '-')"}
 
   if [[ -d "${dst}/usr" ]]; then
-    echo "extract-img: ${dst} already populated, skipping extract" >&2
+    log "extract-img: ${dst} already populated, skipping extract"
     echo "${dst}"
     return
   fi
+
+  log "extract-img: destination → ${dst}"
 
   read -r img <<< "$(download-img "${url}")"
   read -r root_mnt boot_mnt <<< "$(mount-img "${img}")"
   trap 'umount-img ${img}' EXIT 1 2 3 6
 
+  log "extract-img: rsyncing root partition"
   install "${root_mnt}" "${dst}"
+  log "extract-img: rsyncing boot partition"
   install "${boot_mnt}" "${dst}/boot"
+  log "extract-img: done"
   echo "${dst}"
 }
 

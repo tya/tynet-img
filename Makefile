@@ -6,7 +6,7 @@ KICKSTART_IP  = 10.0.60.100
 
 .PHONY: help build build-linux test clean kickstart provision \
         update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% reboot-nodes \
-        pi1 pi2 pi3 pi
+        pi1 pi2 pi3 pi logs
 
 .DEFAULT_GOAL := help
 
@@ -37,6 +37,7 @@ help:
 	@echo "  wipe-tftp              wipe all per-node TFTP dirs (re-run provision to repopulate)"
 	@echo "  wipe-tftp-<serial>     wipe a single node's TFTP dir (e.g. make wipe-tftp-244634d3)"
 	@echo "  reboot-nodes           drain and reboot all nodes via Ansible"
+	@echo "  logs                   show recent build log files"
 
 build:
 	cd $(CMD_DIR) && go build -o ../$(BINARY) .
@@ -121,3 +122,13 @@ wipe-all-overlays:
 # then uncordons after the node comes back up.
 reboot-nodes:
 	cd ansible && ansible-playbook playbooks/reboot-nodes.yml
+
+# Show recent build logs with outcome (SUCCESS/FAILED) and duration.
+logs:
+	@ls -t /var/log/tynet-img/customize-img-*.log 2>/dev/null | head -20 | while read f; do \
+		result=$$(grep -o 'SUCCESS\|FAILED' "$$f" | tail -1); \
+		result=$${result:-INCOMPLETE}; \
+		node=$$(grep 'hostname:' "$$f" | head -1 | awk '{print $$NF}'); \
+		ts=$$(basename "$$f" | sed 's/customize-img-\([0-9-]*\)-.*/\1/'); \
+		echo "$$ts  $$node  $$result  $$f"; \
+	done

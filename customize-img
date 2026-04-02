@@ -2,6 +2,24 @@
 set -Eeuo pipefail
 
 ################################################################################
+# logging
+################################################################################
+LOG_DIR=/var/log/tynet-img
+mkdir -p "${LOG_DIR}"
+
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
+
+step() {
+  _step_name=$*
+  _step_start=${SECONDS}
+  log "--- ${_step_name}"
+}
+
+step_done() {
+  log "    done (${$((SECONDS - _step_start))}s)"
+}
+
+################################################################################
 # functions
 ################################################################################
 ##
@@ -119,16 +137,50 @@ function customize-img {
   local kickstart_ip=${1:?"kickstart_ip required"}
   local serial=${2:?"serial required"}
   local hostname=${3:-${serial}}
+
+  # Set up log file and tee all stderr to it for the duration of this run.
+  local logfile="${LOG_DIR}/customize-img-$(date +%Y%m%d-%H%M%S)-${hostname}.log"
+  ln -sf "${logfile}" "${LOG_DIR}/latest.log"
+  exec 2> >(tee -a "${logfile}" >&2)
+
+  log "========================================"
+  log "customize-img start"
+  log "  hostname:     ${hostname}"
+  log "  serial:       ${serial}"
+  log "  kickstart_ip: ${kickstart_ip}"
+  log "  log:          ${logfile}"
+  log "========================================"
+
+  trap 'log "FAILED (exit $?) after $((SECONDS))s — see ${logfile}"' ERR
+
   local root_dir
+  step "extract-img"
   root_dir=$(./extract-img)
   [[ -n "${root_dir}" && -d "${root_dir}/usr" ]] \
-    || { echo "customize-img: extract-img returned invalid root: '${root_dir}'" >&2; exit 1; }
+    || { log "extract-img returned invalid root: '${root_dir}'"; exit 1; }
+  log "    root: ${root_dir} (${SECONDS}s elapsed)"
+
   local boot_dir=${root_dir}/boot
 
+  step "customize_root"
   customize_root "${root_dir}" "${kickstart_ip}"
+  log "    done (${SECONDS}s elapsed)"
+
+  step "customize_boot"
   customize_boot "${boot_dir}" "${kickstart_ip}" "${serial}" "${hostname}" "${root_dir}"
+  log "    done (${SECONDS}s elapsed)"
+
+  step "install_overlay_hook"
   install_overlay_hook "${root_dir}"
+  log "    done (${SECONDS}s elapsed)"
+
+  step "rebuild_initramfs"
   rebuild_initramfs "${root_dir}"
+  log "    done (${SECONDS}s elapsed)"
+
+  log "========================================"
+  log "customize-img SUCCESS — ${hostname} (${SECONDS}s total)"
+  log "========================================"
 
   echo "${root_dir}"
 }
