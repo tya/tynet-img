@@ -5,7 +5,7 @@ OVERLAY_DIR   = /exports/overlay
 KICKSTART_IP  = 10.0.60.100
 
 .PHONY: help build build-linux test clean kickstart provision \
-        update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-release-% reboot-nodes \
+        update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% reboot-nodes \
         pi1 pi2 pi3 pi
 
 .DEFAULT_GOAL := help
@@ -35,6 +35,7 @@ help:
 	@echo "  wipe-all-overlays      wipe all nodes' overlays (requires CONFIRM=yes)"
 	@echo "  wipe-release-<name>    wipe a netboot release dir (e.g. make wipe-release-ubuntu-22.04)"
 	@echo "  wipe-tftp              wipe all per-node TFTP dirs (re-run provision to repopulate)"
+	@echo "  wipe-tftp-<serial>     wipe a single node's TFTP dir (e.g. make wipe-tftp-244634d3)"
 	@echo "  reboot-nodes           drain and reboot all nodes via Ansible"
 
 build:
@@ -87,9 +88,16 @@ wipe-release-%:
 # Wipe all per-node TFTP dirs — removes stale/mixed files from prior image builds.
 # Run 'make provision' afterward to repopulate from the current base image.
 wipe-tftp:
-	@echo "Wiping per-node TFTP directories under /srv/tftpboot/"
+	@echo "Wiping all per-node TFTP directories under /srv/tftpboot/"
 	sudo rm -rf /srv/tftpboot/*/
 	sudo mkdir -p /srv/tftpboot
+
+# Wipe a single node's TFTP dir: make wipe-tftp-244634d3
+wipe-tftp-%:
+	@[ -d /srv/tftpboot/$* ] || { echo "ERROR: /srv/tftpboot/$* does not exist"; exit 1; }
+	@echo "Wiping /srv/tftpboot/$*"
+	sudo rm -rf /srv/tftpboot/$*
+	sudo mkdir -p /srv/tftpboot/$*
 
 # Wipe one node's overlay: make wipe-overlay-pi1
 # The node must be offline or rebooted after this.
