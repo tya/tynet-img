@@ -63,7 +63,7 @@ make pi3
 ## Key design details
 
 - Scripts write human-readable output to **stderr** and machine-readable output (paths) to **stdout**.
-- The default image is Ubuntu 26.04 snapshot (arm64). The destination defaults to `/exports/netboot/<image-basename>`.
+- The default image is Ubuntu 22.04 snapshot (arm64). The destination defaults to `/exports/netboot/<image-basename>`.
 - `extract-img` caches the downloaded `.img` in `/var/cache/img/` and skips re-download if already present. rsync exit code 23 (partial transfer due to special files) is treated as success.
 - `customize-img` validates that `root_dir` points to a real OS tree (`usr/` present) before modifying anything — prevents host corruption if `extract-img` fails.
 - The boot partition is served via TFTP; the root partition is served via NFSv3.
@@ -74,7 +74,7 @@ make pi3
 ## Overlay filesystem design
 
 Each node runs overlayfs with:
-- **lower**: read-only NFS root (`/exports/netboot/ubuntu-26.04`)
+- **lower**: read-only NFS root (`/exports/netboot/ubuntu-22.04`)
 - **upper**: tmpfs (RAM-backed) — required because Linux 6.x needs `RENAME_WHITEOUT` on upper, which NFS doesn't support
 - **state store**: per-node NFS share (`/exports/overlay/<hostname>/`) — upper layer is synced here on shutdown and restored on boot
 

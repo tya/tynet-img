@@ -1,6 +1,6 @@
 BINARY        = serve-cloud-init
 CMD_DIR       = serve-cloud-init
-BASE_IMG      = /exports/netboot/ubuntu-26.04
+BASE_IMG      = /exports/netboot/ubuntu-22.04
 OVERLAY_DIR   = /exports/overlay
 KICKSTART_IP  = 10.0.60.100
 
