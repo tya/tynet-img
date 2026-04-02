@@ -5,7 +5,7 @@ OVERLAY_DIR   = /exports/overlay
 KICKSTART_IP  = 10.0.60.100
 
 .PHONY: help build build-linux test clean kickstart provision \
-        update-base wipe-overlay-% wipe-all-overlays reboot-nodes \
+        update-base wipe-overlay-% wipe-all-overlays wipe-tftp reboot-nodes \
         pi1 pi2 pi3 pi
 
 .DEFAULT_GOAL := help
@@ -33,6 +33,7 @@ help:
 	@echo "  update-base            apply security patches to the shared base image"
 	@echo "  wipe-overlay-<node>    wipe a single node's overlay (e.g. make wipe-overlay-pi2)"
 	@echo "  wipe-all-overlays      wipe all nodes' overlays (requires CONFIRM=yes)"
+	@echo "  wipe-tftp              wipe all per-node TFTP dirs (re-run provision to repopulate)"
 	@echo "  reboot-nodes           drain and reboot all nodes via Ansible"
 
 build:
@@ -73,6 +74,13 @@ update-base:
 	sudo systemd-nspawn -D $(BASE_IMG) apt-get update
 	sudo systemd-nspawn -D $(BASE_IMG) apt-get upgrade -y
 	sudo systemd-nspawn -D $(BASE_IMG) apt-get autoremove -y
+
+# Wipe all per-node TFTP dirs — removes stale/mixed files from prior image builds.
+# Run 'make provision' afterward to repopulate from the current base image.
+wipe-tftp:
+	@echo "Wiping per-node TFTP directories under /srv/tftpboot/"
+	sudo rm -rf /srv/tftpboot/*/
+	sudo mkdir -p /srv/tftpboot
 
 # Wipe one node's overlay: make wipe-overlay-pi1
 # The node must be offline or rebooted after this.
