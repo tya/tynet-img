@@ -5,7 +5,7 @@ OVERLAY_DIR   = /exports/overlay
 KICKSTART_IP  = 10.0.60.100
 
 .PHONY: help build build-linux test clean kickstart provision \
-        update-base wipe-overlay-% wipe-all-overlays wipe-tftp reboot-nodes \
+        update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-release-% reboot-nodes \
         pi1 pi2 pi3 pi
 
 .DEFAULT_GOAL := help
@@ -33,6 +33,7 @@ help:
 	@echo "  update-base            apply security patches to the shared base image"
 	@echo "  wipe-overlay-<node>    wipe a single node's overlay (e.g. make wipe-overlay-pi2)"
 	@echo "  wipe-all-overlays      wipe all nodes' overlays (requires CONFIRM=yes)"
+	@echo "  wipe-release-<name>    wipe a netboot release dir (e.g. make wipe-release-ubuntu-22.04)"
 	@echo "  wipe-tftp              wipe all per-node TFTP dirs (re-run provision to repopulate)"
 	@echo "  reboot-nodes           drain and reboot all nodes via Ansible"
 
@@ -74,6 +75,14 @@ update-base:
 	sudo systemd-nspawn -D $(BASE_IMG) apt-get update
 	sudo systemd-nspawn -D $(BASE_IMG) apt-get upgrade -y
 	sudo systemd-nspawn -D $(BASE_IMG) apt-get autoremove -y
+
+# Wipe a netboot release directory: make wipe-release-ubuntu-22.04
+# Removes /exports/netboot/<name>. Does NOT touch TFTP dirs or NFS exports —
+# run 'make wipe-tftp' and 'make provision' afterward if also removing the active release.
+wipe-release-%:
+	@[ -d /exports/netboot/$* ] || { echo "ERROR: /exports/netboot/$* does not exist"; exit 1; }
+	@echo "Wiping /exports/netboot/$*"
+	sudo rm -rf /exports/netboot/$*
 
 # Wipe all per-node TFTP dirs — removes stale/mixed files from prior image builds.
 # Run 'make provision' afterward to repopulate from the current base image.

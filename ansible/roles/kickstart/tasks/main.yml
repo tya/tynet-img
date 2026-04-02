@@ -152,6 +152,13 @@
     cmd: mkdir -p {{ groups['nodes'] | map('regex_replace', '^(.*)$', '/exports/overlay/\\1/upper /exports/overlay/\\1/work') | join(' ') }}
   changed_when: false
 
+- name: Find netboot release directories
+  ansible.builtin.find:
+    paths: /exports/netboot
+    file_type: directory
+    recurse: false
+  register: netboot_releases
+
 - name: Write /etc/exports from template
   ansible.builtin.template:
     src: exports.j2
