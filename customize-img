@@ -16,9 +16,10 @@ function customize_root {
   local root_dir=${1}
   local ip=${2}
 
-  # fstab - ro since overlayfs handles writes
-  local fsline="${ip}:${root_dir}/ / nfs defaults,ro,nolock,errors=remount-ro 0 0"
-  echo "${fsline}" > "${root_dir}/etc/fstab"
+  # fstab - no root entry: overlayfs is set up by initramfs and systemd must
+  # not remount / from fstab (that would override the overlay with ro NFS).
+  # Leave fstab empty so systemd leaves the overlay root as-is (rw).
+  echo "" > "${root_dir}/etc/fstab"
 
   # disable resizefs
   touch "${root_dir}/etc/growroot-disabled"
