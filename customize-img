@@ -109,7 +109,7 @@ function rebuild_initramfs {
 
   DEBIAN_FRONTEND=noninteractive \
     systemd-nspawn --bind-ro=/etc/resolv.conf -D "${root_dir}" \
-    bash -c 'apt-get install -y nfs-common && update-initramfs -u -k all'
+    bash -c 'apt-get install -y nfs-common && update-initramfs -c -k all && cp /boot/initrd.img-* /boot/initrd.img'
 }
 
 ##
