@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# check-netboot — show recent TFTP and NFS activity on kickstart
+# Usage: ./check-netboot [--since "N minutes ago"] [--follow]
+#
+# Runs locally (SSHes to kickstart) or directly on kickstart itself.
+
+set -euo pipefail
+
+KICKSTART=kickstart.tynet.us
+SINCE="5 minutes ago"
+FOLLOW=false
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --since|-s) SINCE=$2; shift 2 ;;
+    --follow|-f) FOLLOW=true; shift ;;
+    *) echo "Usage: $0 [--since 'N minutes ago'] [--follow]" >&2; exit 1 ;;
+  esac
+done
+
+# Run a command on kickstart, or locally if already there.
+run() {
+  if [[ "$(hostname -s)" == "kickstart" ]]; then
+    bash -c "$1"
+  else
+    ssh "$KICKSTART" "$1"
+  fi
+}
+
+if $FOLLOW; then
+  echo "Following TFTP and NFS logs on $KICKSTART (Ctrl-C to stop)..."
+  echo ""
+  run "sudo journalctl -f -u tftpd-hpa -u nfs-server -k 2>/dev/null \
+    | grep --line-buffered -E 'tftpd|nfs|NFS|mount'"
+  exit 0
+fi
+
+echo "=== TFTP downloads (since: $SINCE) ==="
+TFTP=$(run "journalctl -u tftpd-hpa --since '$SINCE' --no-pager 2>/dev/null \
+  | grep RRQ \
+  | awk '{print \$1, \$2, \$3, \$8, \$10}'" 2>/dev/null)
+if [[ -z "$TFTP" ]]; then
+  echo "  (none)"
+else
+  # Group by boot attempt: a new attempt starts when we see config.txt or start4.elf
+  echo "$TFTP" | awk '
+    /config\.txt|start4\.elf/ { attempt++ }
+    { printf "  [boot %d] %s %s %s  %-15s %s\n", attempt, $1, $2, $3, $4, $5 }
+  '
+fi
+
+echo ""
+echo "=== NFS mounts (since: $SINCE) ==="
+NFS_LOG=$(run "journalctl -k --since '$SINCE' --no-pager 2>/dev/null \
+  | grep -i 'nfs\|mount' || true" 2>/dev/null)
+if [[ -z "$NFS_LOG" ]]; then
+  echo "  (none in kernel log)"
+else
+  echo "$NFS_LOG"
+fi
+
+echo ""
+echo "=== Current NFS clients ==="
+MOUNTS=$(run "showmount -a 2>/dev/null" 2>/dev/null)
+if [[ "$MOUNTS" == *"mount points"* ]] && ! echo "$MOUNTS" | grep -qv "mount points"; then
+  echo "  (none)"
+else
+  echo "$MOUNTS" | grep -v "mount points" | sed 's/^/  /'
+fi
