@@ -1,3 +1,4 @@
 ---
 node_serial: ad36c642
 nfs_fsid: 1
+nfs_release: ubuntu-22.04

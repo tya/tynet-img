@@ -1,3 +1,4 @@
 ---
 node_serial: 244634d3
 nfs_fsid: 2
+nfs_release: ubuntu-22.04
