@@ -49,9 +49,25 @@ fi
 
 echo ""
 echo "=== Current NFS clients ==="
-MOUNTS=$(showmount -a 2>/dev/null)
-if [[ "$MOUNTS" == *"mount points"* ]] && ! echo "$MOUNTS" | grep -qv "mount points"; then
+MOUNTS=$(showmount -a 2>/dev/null | grep -v "^All" || true)
+if [[ -z "$MOUNTS" ]]; then
   echo "  (none)"
 else
-  echo "$MOUNTS" | grep -v "mount points" | sed 's/^/  /'
+  printf "  %-16s  %-30s  %s\n" "CLIENT" "PATH" "TYPE"
+  printf "  %-16s  %-30s  %s\n" "------" "----" "----"
+  while IFS= read -r line; do
+    ip=$(echo "${line}" | cut -d: -f1)
+    path=$(echo "${line}" | cut -d: -f2-)
+    hostname=$(getent hosts "${ip}" 2>/dev/null | awk '{print $2}' | cut -d. -f1)
+    client="${ip}${hostname:+ (${hostname})}"
+    if [[ "${path}" == */exports/netboot/* ]]; then
+      release=$(basename "${path}")
+      type="root (${release})"
+    elif [[ "${path}" == */exports/overlay/* ]]; then
+      type="overlay"
+    else
+      type="—"
+    fi
+    printf "  %-16s  %-30s  %s\n" "${client}" "${path}" "${type}"
+  done <<< "${MOUNTS}"
 fi

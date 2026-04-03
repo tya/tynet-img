@@ -18,6 +18,7 @@
       - git
       - systemd-container
       - ansible
+      - socat
     state: present
     update_cache: true
     cache_valid_time: 3600
@@ -202,7 +203,7 @@
 # overlay_host must be the short hostname since NFS exports use short names.
 - name: Write per-node cmdline.txt
   ansible.builtin.copy:
-    content: "console=serial0,115200 console=tty1 root=/dev/nfs nfsroot={{ kickstart_ip }}:/exports/netboot/{{ hostvars[node].nfs_release }},vers=3 ro ip=dhcp rootwait swiotlb=noforce overlay_host={{ node }} ds=nocloud;s=http://{{ kickstart_ip }}:8000/{{ hostvars[node].node_serial }}/\n"
+    content: "console=serial0,115200 console=tty1 root=/dev/nfs nfsroot={{ kickstart_ip }}:/exports/netboot/{{ hostvars[node].nfs_release }},vers=3 ro ip=dhcp rootwait swiotlb=noforce overlay_host={{ node }} netconsole=6665@/eth0,6666@{{ kickstart_ip }}/{{ kickstart_mac }} ds=nocloud;s=http://{{ kickstart_ip }}:8000/{{ hostvars[node].node_serial }}/\n"
     dest: "/srv/tftpboot/{{ hostvars[node].node_serial }}/cmdline.txt"
     owner: root
     group: root

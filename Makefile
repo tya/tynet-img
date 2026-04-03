@@ -6,7 +6,7 @@ KICKSTART_IP  = 10.0.60.100
 
 .PHONY: help build build-linux test clean kickstart provision \
         update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% reboot-nodes \
-        pi1 pi2 pi3 pi logs status
+        pi1 pi2 pi3 pi logs status console
 
 .DEFAULT_GOAL := help
 
@@ -38,6 +38,7 @@ help:
 	@echo "  wipe-tftp-<serial>     wipe a single node's TFTP dir (e.g. make wipe-tftp-244634d3)"
 	@echo "  reboot-nodes           drain and reboot all nodes via Ansible"
 	@echo "  status                 show per-node status (release, overlay, last sync)"
+	@echo "  console                listen for netconsole messages from booting nodes"
 	@echo "  logs                   show recent build log files"
 
 build:
@@ -126,6 +127,12 @@ reboot-nodes:
 
 status:
 	./check-status
+
+# Listen for netconsole UDP messages from booting nodes.
+# Nodes send kernel log (including overlayroot-nfs hook output) to kickstart:6666.
+console:
+	@echo "Listening for netconsole messages on UDP 6666 (Ctrl-C to stop)..."
+	socat UDP-RECV:6666 STDOUT
 
 # Show recent build logs with outcome (SUCCESS/FAILED) and duration.
 logs:

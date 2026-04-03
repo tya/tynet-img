@@ -24,6 +24,9 @@ case $1 in prereqs) prereqs; exit 0;; esac
 # shellcheck source=/dev/null
 . /scripts/functions
 
+# Write to kernel ring buffer so messages appear over netconsole and in dmesg.
+kmsg() { echo "<6>overlayroot-nfs: $*" > /dev/kmsg 2>/dev/null || true; }
+
 cmdline_val() {
     cat /proc/cmdline | tr ' ' '\n' | grep "^${1}=" | cut -d= -f2- | head -1
 }
@@ -34,10 +37,12 @@ OVERLAY_HOST=$(cmdline_val overlay_host)
 KICKSTART_IP=$(cmdline_val nfsroot | cut -d: -f1)
 if [ -z "${KICKSTART_IP}" ]; then
     log_failure_msg "overlayroot-nfs: cannot determine kickstart IP from nfsroot="
+    kmsg "FAILED: cannot determine kickstart IP from nfsroot="
     exit 0
 fi
 
 log_begin_msg "overlayroot-nfs: setting up overlay for ${OVERLAY_HOST}"
+kmsg "start: overlay for ${OVERLAY_HOST} kickstart=${KICKSTART_IP}"
 
 # Mount per-node NFS state store (read the saved upper layer from here)
 NFS_STATE="/run/overlayroot-nfs"
@@ -45,8 +50,10 @@ mkdir -p "${NFS_STATE}"
 if ! mount -t nfs -o rw,nolock,vers=3 \
         "${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}" "${NFS_STATE}"; then
     log_failure_msg "overlayroot-nfs: failed to mount NFS state store"
+    kmsg "FAILED: could not mount NFS state store ${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}"
     exit 0
 fi
+kmsg "mounted NFS state store"
 
 # Create tmpfs upper layer (kernel 6.x requires RENAME_WHITEOUT on upper;
 # NFS does not support it — tmpfs does)
@@ -58,6 +65,9 @@ mkdir -p "${TMPFS_UPPER}/upper" "${TMPFS_UPPER}/work"
 # Restore saved state from NFS into the tmpfs upper layer
 if [ -d "${NFS_STATE}/upper" ] && [ "$(ls -A ${NFS_STATE}/upper 2>/dev/null)" ]; then
     cp -a "${NFS_STATE}/upper/." "${TMPFS_UPPER}/upper/"
+    kmsg "restored saved state from NFS upper"
+else
+    kmsg "no saved state — starting fresh"
 fi
 
 # Bind-mount the current NFS root as the read-only lower layer
@@ -72,11 +82,13 @@ if ! mount -t overlay overlay \
         -o "lowerdir=${LOWER},upperdir=${TMPFS_UPPER}/upper,workdir=${TMPFS_UPPER}/work" \
         "${rootmnt}"; then
     log_failure_msg "overlayroot-nfs: overlay mount failed, falling back to plain NFS root"
+    kmsg "FAILED: overlay mount failed — falling back to plain NFS root"
     umount "${TMPFS_UPPER}"
     umount "${LOWER}"
     umount "${NFS_STATE}"
     exit 0
 fi
+kmsg "overlay mounted successfully"
 
 # Move all sub-mounts inside the new root so they remain accessible after pivot_root.
 # The sync service will write tmpfs upper back to NFS_STATE on shutdown.
@@ -87,4 +99,5 @@ mount --move "${LOWER}"       "${rootmnt}/run/overlayroot-lower"
 mount --move "${TMPFS_UPPER}" "${rootmnt}/run/overlayroot-upper"
 mount --move "${NFS_STATE}"   "${rootmnt}/run/overlayroot-nfs"
 
+kmsg "done: pivot_root handoff to ${OVERLAY_HOST}"
 log_end_msg
