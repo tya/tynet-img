@@ -10,7 +10,7 @@ A Pi boots over the network by fetching its kernel and boot files via TFTP, then
 Pi (power on)
   └── DHCP  → gets TFTP server IP from UniFi (option 66)
   └── TFTP  → /srv/tftpboot/<serial>/         (boot files + cmdline.txt)
-  └── NFS   → /exports/netboot/ubuntu-26.04/  (shared read-only root)
+  └── NFS   → /exports/netboot/ubuntu-22.04/  (shared read-only root)
   └── NFS   → /exports/overlay/<hostname>/    (per-node NFS state store)
   └── HTTP  → :8000/<serial>/                 (cloud-init user-data + meta-data)
 ```
@@ -59,10 +59,10 @@ If any step fails, the hook falls back to booting plain NFS root (no overlay) so
 
 ### initramfs rebuild with systemd-nspawn
 
-After installing the `overlayroot-nfs` hook into the image, `customize-img` must rebuild the initramfs so the hook is included. This is done by running `update-initramfs -u -k all` inside the extracted image using `systemd-nspawn`:
+After installing the `overlayroot-nfs` hook into the image, `customize-img` must rebuild the initramfs so the hook is included. This is done by running `update-initramfs -c -k all` inside the extracted image using `systemd-nspawn`:
 
 ```
-systemd-nspawn -D /exports/netboot/ubuntu-26.04 update-initramfs -u -k all
+systemd-nspawn -D /exports/netboot/ubuntu-22.04 update-initramfs -c -k all
 ```
 
 `systemd-nspawn` is used instead of a bare `chroot` because:
@@ -79,20 +79,22 @@ The pre-mounted tmpfs on `/dev` is cleaned up via a `trap` on function return.
 Downloads an Ubuntu ARM64 preinstalled image, extracts it, and rsyncs the root and boot partitions to a local directory.
 
 - Caches the downloaded `.img` in `/var/cache/img/` — re-runs are fast
-- Defaults to the Ubuntu 26.04 snapshot arm64 image
+- Defaults to the Ubuntu 22.04 LTS raspi arm64 image
 - Defaults destination to `/exports/netboot/<image-name>/`
+- Skips download and rsync if the destination is already populated — re-runs after a failed build are fast
 - Writes the destination path to stdout
 
 ```bash
 sudo ./extract-img
-sudo ./extract-img https://cdimage.ubuntu.com/.../ubuntu-26.04-...img.xz /exports/netboot/ubuntu-26.04
+sudo ./extract-img https://cdimage.ubuntu.com/.../ubuntu-22.04.5-...img.xz /exports/netboot/ubuntu-22.04
 ```
 
 ### `customize-img [KICKSTART_IP] [SERIAL] [HOSTNAME]`
 Calls `extract-img`, then modifies the extracted filesystem for netboot:
 
-- Writes `cmdline.txt` with NFS root (read-only), `overlay_host=<hostname>`, and cloud-init URL
-- Sets `/etc/fstab` to mount root over NFS (read-only)
+- Writes `cmdline.txt` with NFS root (read-only), `swiotlb=noforce`, `overlay_host=<hostname>`, and cloud-init URL
+- Downloads Pi 4 firmware files (`start4.elf`, `fixup4.dat`) into the boot partition
+- Empties `/etc/fstab` so systemd does not remount the overlay root from NFS (which would override it read-only)
 - Disables growroot
 - Installs the `overlayroot-nfs` initramfs hook
 - Installs the `overlayroot-nfs-sync` shutdown service for overlay state persistence
@@ -154,9 +156,14 @@ The kickstart host is configured with Ansible from your Mac. This installs all r
 brew install ansible
 ```
 
-**Provision production (`kickstart.tynet.us`):**
+**Provision production from Mac:**
 ```bash
 make kickstart
+```
+
+**Provision kickstart from kickstart itself (no SSH needed):**
+```bash
+make provision
 ```
 
 **Provision the local VM kickstart (test env only):**
@@ -164,13 +171,14 @@ make kickstart
 cd vms && make provision
 ```
 
-Both use the same Ansible playbook (`ansible/playbooks/kickstart.yml`) with different inventories:
+All use the same Ansible playbook (`ansible/playbooks/kickstart.yml`) with different inventories:
 
 ```
 ansible/
-  inventory.ini        # production: kickstart.tynet.us + pi1-pi3
+  inventory.ini        # production: SSH from Mac
+  inventory-local.ini  # production: local connection from kickstart itself
   inventory-vm.ini     # VM test environment: lima-kickstart + testnode
-  group_vars/all.yml   # shared vars (subnet)
+  group_vars/all.yml   # shared vars (subnet, kickstart_ip)
   host_vars/           # per-node config (node_serial, nfs_fsid)
   playbooks/
     kickstart.yml      # configure kickstart host
@@ -178,6 +186,8 @@ ansible/
     kickstart/         # packages, TFTP, NFS, cloud-init service,
                        #   overlay dirs, NFS exports, update-base timer
 ```
+
+NFS exports are auto-discovered from `/exports/netboot/` — adding or removing a release dir and re-running `make provision` updates `/etc/exports` automatically.
 
 **What stays in shell scripts vs Ansible:**
 
@@ -202,6 +212,15 @@ make wipe-all-overlays CONFIRM=yes
 
 # Reboot all nodes via Ansible
 make reboot-nodes
+
+# Remove a stale release directory from /exports/netboot/
+make wipe-release-ubuntu-26.04
+
+# Wipe all per-node TFTP dirs (re-run provision to repopulate)
+make wipe-tftp
+
+# Wipe a single node's TFTP dir by serial number
+make wipe-tftp-a43386be
 ```
 
 **Typical base image update flow:**
@@ -212,6 +231,23 @@ make reboot-nodes                       # restart nodes against updated base
 ```
 
 The kickstart host also runs an `update-base.timer` systemd unit that applies updates daily at 03:00 (with a random 30-minute delay). After an automated update you should wipe overlays and reboot nodes manually.
+
+## Logging
+
+`customize-img` and `extract-img` write timestamped logs to `/var/log/tynet-img/` on kickstart, one file per run. A `latest.log` symlink always points to the most recent build.
+
+```bash
+# Watch a live build
+tail -f /var/log/tynet-img/latest.log
+
+# See recent run history (node, outcome, path)
+make logs
+
+# Read a specific run
+cat /var/log/tynet-img/customize-img-20260402-143022-pi3.tynet.us.log
+```
+
+Each log records the hostname, serial, kickstart IP, elapsed time per step, and a final SUCCESS or FAILED line.
 
 ## Provisioning a new node (end-to-end)
 
