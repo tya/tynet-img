@@ -106,7 +106,7 @@
   ansible.builtin.git:
     repo: git@github.com:tya/tynet-img.git
     dest: "{{ repo_dir }}"
-    version: ubuntu-22.04
+    version: main
     update: true
   become: false
 
