@@ -25,7 +25,7 @@ fi
 
 echo "=== TFTP downloads (since: $SINCE) ==="
 TFTP=$(journalctl -u tftpd-hpa --since "$SINCE" --no-pager 2>/dev/null \
-  | grep RRQ \
+  | grep RRQ || true \
   | awk '{print $1, $2, $3, $8, $10}')
 if [[ -z "$TFTP" ]]; then
   echo "  (none)"
