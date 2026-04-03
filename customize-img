@@ -141,7 +141,7 @@ function customize-img {
   # Set up log file and tee all stderr to it for the duration of this run.
   local logfile="${LOG_DIR}/customize-img-$(date +%Y%m%d-%H%M%S)-${hostname}.log"
   ln -sf "${logfile}" "${LOG_DIR}/latest.log"
-  exec 2> >(tee -a "${logfile}" >&2)
+  exec > >(tee -a "${logfile}") 2> >(tee -a "${logfile}" >&2)
 
   log "========================================"
   log "customize-img start"
