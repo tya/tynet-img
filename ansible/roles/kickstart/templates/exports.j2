@@ -3,7 +3,7 @@
 
 # Netboot release images (auto-discovered from /exports/netboot/)
 {% for release in netboot_releases.files | sort(attribute='path') %}
-{{ release.path }} {{ subnet }}(ro,sync,no_subtree_check,no_root_squash,fsid={{ loop.index0 }})
+{{ release.path }} {{ subnet }}(ro,sync,no_subtree_check,no_root_squash,fsid={{ loop.index0 + 10 }})
 {% endfor %}
 
 # Per-node writable overlay state store
