@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# check-status — show per-node netboot status
+# Run on kickstart.
+
+set -euo pipefail
+
+OVERLAY_DIR=/exports/overlay
+NODES=(pi1.tynet.us pi2.tynet.us pi3.tynet.us)
+
+# Get active NFS mounts: "ip:/path" lines
+nfs_mounts=$(showmount -a 2>/dev/null | grep -v "^All" || true)
+
+printf "%-20s  %-8s  %-20s  %-8s  %s\n" "NODE" "STATUS" "RELEASE" "OVERLAY" "LAST SYNC"
+printf "%-20s  %-8s  %-20s  %-8s  %s\n" "----" "------" "-------" "-------" "---------"
+
+for node in "${NODES[@]}"; do
+  short="${node%%.*}"
+
+  # Determine UP/DOWN by whether the node has an active NFS root mount
+  root_mount=$(echo "${nfs_mounts}" | grep -E ":/exports/netboot/" | grep -i "${short}\|$(dig +short "${node}" 2>/dev/null | head -1)" || true)
+
+  if [[ -n "${root_mount}" ]]; then
+    status="UP"
+    release=$(echo "${root_mount}" | sed 's|.*:/exports/netboot/||' | awk '{print $1}')
+  else
+    status="DOWN"
+    release="—"
+  fi
+
+  # Overlay: check if node has an active overlay NFS mount
+  overlay_mount=$(echo "${nfs_mounts}" | grep ":/exports/overlay/${node}" || true)
+  if [[ -n "${overlay_mount}" ]]; then
+    overlay="active"
+  else
+    overlay="—"
+  fi
+
+  # Last sync: mtime of the overlay upper dir on kickstart
+  upper="${OVERLAY_DIR}/${node}/upper"
+  if [[ -d "${upper}" ]]; then
+    last_sync=$(stat -c '%y' "${upper}" | cut -c1-16)
+  else
+    last_sync="never"
+  fi
+
+  printf "%-20s  %-8s  %-20s  %-8s  %s\n" "${node}" "${status}" "${release}" "${overlay}" "${last_sync}"
+done
