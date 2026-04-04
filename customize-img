@@ -16,7 +16,7 @@ step() {
 }
 
 step_done() {
-  log "    done (${$((SECONDS - _step_start))}s)"
+  log "    done ($((SECONDS - _step_start))s)"
 }
 
 ################################################################################
@@ -113,6 +113,19 @@ EOF
 }
 
 ##
+# validate_initramfs - verify overlayroot-nfs hook is present in the rebuilt initramfs
+function validate_initramfs {
+  local root_dir=${1}
+  local initramfs="${root_dir}/boot/initrd.img"
+
+  [[ -f "${initramfs}" ]] \
+    || { log "ERROR: initramfs not found at ${initramfs}"; exit 1; }
+
+  lsinitramfs "${initramfs}" | grep -q "scripts/init-bottom/overlayroot-nfs" \
+    || { log "ERROR: overlayroot-nfs hook not found in initramfs — rebuild may have failed silently"; exit 1; }
+}
+
+##
 # rebuild_initramfs - run update-initramfs inside the extracted image.
 # Uses systemd-nspawn which handles /proc /dev /sys automatically and
 # works reliably for both native and cross-arch builds.
@@ -141,7 +154,8 @@ function customize-img {
   local hostname=${3:-${serial}}
 
   # Set up log file and tee all stderr to it for the duration of this run.
-  local logfile="${LOG_DIR}/customize-img-$(date +%Y%m%d-%H%M%S)-${hostname}.log"
+  local logfile
+  logfile="${LOG_DIR}/customize-img-$(date +%Y%m%d-%H%M%S)-${hostname}.log"
   ln -sf "${logfile}" "${LOG_DIR}/latest.log"
   exec > >(tee -a "${logfile}") 2> >(tee -a "${logfile}" >&2)
 
@@ -178,6 +192,10 @@ function customize-img {
 
   step "rebuild_initramfs"
   rebuild_initramfs "${root_dir}"
+  log "    done (${SECONDS}s elapsed)"
+
+  step "validate_initramfs"
+  validate_initramfs "${root_dir}"
   log "    done (${SECONDS}s elapsed)"
 
   log "========================================"
