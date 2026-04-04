@@ -14,12 +14,8 @@ printf "%-20s  %-8s  %-20s  %-8s  %s\n" "NODE" "STATUS" "RELEASE" "OVERLAY" "LAS
 printf "%-20s  %-8s  %-20s  %-8s  %s\n" "----" "------" "-------" "-------" "---------"
 
 for node in "${NODES[@]}"; do
-  short="${node%%.*}"
-
-  # Determine UP/DOWN by whether the node has an active NFS root mount
-  root_mount=$(echo "${nfs_mounts}" | grep -E ":/exports/netboot/" | grep -i "${short}\|$(dig +short "${node}" 2>/dev/null | head -1)" || true)
-
-  if [[ -n "${root_mount}" ]]; then
+  # Determine UP/DOWN by ping — showmount data can be stale
+  if ping -c1 -W1 "${node}" &>/dev/null; then
     status="UP"
   else
     status="DOWN"
