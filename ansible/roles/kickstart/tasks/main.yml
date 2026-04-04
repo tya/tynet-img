@@ -196,8 +196,7 @@
 
 - name: Make boot files world-readable for tftpd
   ansible.builtin.command: chmod -R a+r /srv/tftpboot
-  changed_when: true
-  notify: Restart tftpd-hpa
+  changed_when: false
 
 # Write per-node cmdline.txt directly into each TFTP dir.
 # overlay_host must be the short hostname since NFS exports use short names.
