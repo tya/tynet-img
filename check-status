@@ -29,7 +29,7 @@ for node in "${NODES[@]}"; do
 
   # Overlay: check /proc/mounts on the node if it's up
   if [[ "${status}" == "UP" ]]; then
-    if ssh -o ConnectTimeout=3 -o BatchMode=yes "${node}" \
+    if ssh -o ConnectTimeout=3 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "${node}" \
         "grep -q 'exports/overlay' /proc/mounts" 2>/dev/null; then
       overlay="active"
     else
