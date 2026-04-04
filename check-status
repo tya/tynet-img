@@ -36,7 +36,7 @@ for node in "${NODES[@]}"; do
       overlay="none"
     fi
   else
-    overlay="—"
+    overlay="inactive"
   fi
 
   # Last sync: mtime of the overlay upper dir on kickstart
