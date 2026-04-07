@@ -75,16 +75,28 @@ function customize_boot {
 
 ##
 # install_overlay_hook - inject overlayroot-nfs into the image's initramfs
-# and install the overlayroot-nfs-sync shutdown service
+# and install the overlayroot-nfs-sync shutdown service.
+# Detects whether the image uses dracut (ubuntu-26.04+raspi) or
+# initramfs-tools (ubuntu-22.04+raspi) and installs accordingly.
 function install_overlay_hook {
   local root_dir=${1}
   local script_dir
   script_dir=$(dirname "$0")
-  local hook_dst=${root_dir}/etc/initramfs-tools/scripts/init-bottom/overlayroot-nfs
 
-  mkdir -p "$(dirname "${hook_dst}")"
-  cp "${script_dir}/hooks/overlayroot-nfs" "${hook_dst}"
-  chmod +x "${hook_dst}"
+  if [[ -d "${root_dir}/usr/lib/dracut" ]]; then
+    # dracut-based image: install as a dracut module
+    local module_dir="${root_dir}/usr/lib/dracut/modules.d/50overlayroot-nfs"
+    mkdir -p "${module_dir}"
+    cp "${script_dir}/hooks/overlayroot-nfs-dracut-setup.sh" "${module_dir}/module-setup.sh"
+    cp "${script_dir}/hooks/overlayroot-nfs-dracut.sh"       "${module_dir}/overlayroot-nfs.sh"
+    chmod +x "${module_dir}/module-setup.sh" "${module_dir}/overlayroot-nfs.sh"
+  else
+    # initramfs-tools-based image: install as init-bottom hook
+    local hook_dst="${root_dir}/etc/initramfs-tools/scripts/init-bottom/overlayroot-nfs"
+    mkdir -p "$(dirname "${hook_dst}")"
+    cp "${script_dir}/hooks/overlayroot-nfs" "${hook_dst}"
+    chmod +x "${hook_dst}"
+  fi
 
   # Shutdown sync service: copies tmpfs upper back to NFS state store on reboot/shutdown
   local svc_dst=${root_dir}/etc/systemd/system/overlayroot-nfs-sync.service
@@ -121,7 +133,8 @@ EOF
 }
 
 ##
-# validate_initramfs - verify overlayroot-nfs hook is present in the rebuilt initramfs
+# validate_initramfs - verify overlayroot-nfs hook is present in the rebuilt initramfs.
+# Checks both dracut (pre-pivot hook) and initramfs-tools (init-bottom hook) paths.
 function validate_initramfs {
   local root_dir=${1}
   local initramfs="${root_dir}/boot/initrd.img"
@@ -129,7 +142,8 @@ function validate_initramfs {
   [[ -f "${initramfs}" ]] \
     || { log "ERROR: initramfs not found at ${initramfs}"; exit 1; }
 
-  lsinitramfs "${initramfs}" | grep -q "scripts/init-bottom/overlayroot-nfs" \
+  lsinitramfs "${initramfs}" 2>/dev/null \
+    | grep -qE '(scripts/init-bottom/overlayroot-nfs|dracut/hooks/pre-pivot/[0-9]+-overlayroot-nfs)' \
     || { log "ERROR: overlayroot-nfs hook not found in initramfs — rebuild may have failed silently"; exit 1; }
 }
 
