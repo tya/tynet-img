@@ -52,6 +52,14 @@ function customize_boot {
   local hostname=${4}
   local root_dir=${5}
 
+  # Newer raspi images use os_prefix=current/ for A/B updates, but TFTP netboot
+  # needs files at the boot partition root. Flatten current/ into root and remove
+  # os_prefix so the Pi bootloader finds DTBs, overlays, and kernel without prefix.
+  if [[ -d "${boot_dir}/current" ]]; then
+    rsync -a "${boot_dir}/current/" "${boot_dir}/"
+    sed -i '/^os_prefix=/d' "${boot_dir}/config.txt"
+  fi
+
   # cmdline.txt - ro NFS root + overlay_host for per-node overlayfs
   local kickstart_mac
   kickstart_mac=$(ip link show | awk '/link\/ether/{print $2}' | head -1 | tr -d ':')
