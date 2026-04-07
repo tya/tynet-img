@@ -91,7 +91,7 @@ function install {
 ##
 # extract-img
 function extract-img {
-  url=${1:-"https://cdimage.ubuntu.com/releases/26.04/snapshot-4/ubuntu-26.04-snapshot4-preinstalled-server-arm64.img.xz"}
+  url=${1:-"https://cdimage.ubuntu.com/releases/26.04/snapshot-4/ubuntu-26.04-snapshot4-preinstalled-server-arm64+raspi.img.xz"}
   dst=${2:-"/exports/netboot/$(basename "${url}" .img.xz | cut -f1,2 -d '-')"}
 
   if [[ -d "${dst}/usr" ]]; then
