@@ -18,7 +18,7 @@
 # Installed by customize-img into:
 #   /usr/lib/dracut/modules.d/50overlayroot-nfs/overlayroot-nfs.sh
 
-command -v getarg > /dev/null || . /lib/dracut-lib.sh
+command -v getarg > /dev/null || . /lib/dracut-lib.sh 2>/dev/null || . /usr/lib/dracut-lib.sh
 
 # Write to kernel ring buffer so messages appear over netconsole and in dmesg.
 kmsg() { echo "<6>overlayroot-nfs: $*" > /dev/kmsg 2>/dev/null || true; }
