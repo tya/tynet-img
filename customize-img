@@ -90,6 +90,15 @@ function install_overlay_hook {
     cp "${script_dir}/hooks/overlayroot-nfs-dracut-setup.sh" "${module_dir}/module-setup.sh"
     cp "${script_dir}/hooks/overlayroot-nfs-dracut.sh"       "${module_dir}/overlayroot-nfs.sh"
     chmod +x "${module_dir}/module-setup.sh" "${module_dir}/overlayroot-nfs.sh"
+
+    # Force dracut to include the nfs module: dracut's 74nfs check() may return 255
+    # (skip) when hostonly is not set and mount_needs is empty, even though NFS root
+    # is required at boot. Explicitly adding it ensures nfs.ko + mount tools are present.
+    mkdir -p "${root_dir}/etc/dracut.conf.d"
+    cat > "${root_dir}/etc/dracut.conf.d/netboot.conf" << 'DEOF'
+# Force NFS root and overlayroot-nfs module inclusion for netboot.
+add_dracutmodules+=" nfs overlayroot-nfs "
+DEOF
   else
     # initramfs-tools-based image: install as init-bottom hook
     local hook_dst="${root_dir}/etc/initramfs-tools/scripts/init-bottom/overlayroot-nfs"
