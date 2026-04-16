@@ -26,11 +26,22 @@ kmsg() { echo "<6>overlayroot-nfs: $*" > /dev/kmsg 2>/dev/null || true; }
 OVERLAY_HOST=$(getarg overlay_host=) || true
 [ -z "${OVERLAY_HOST}" ] && exit 0
 
+# Debug: log raw cmdline sources to diagnose getarg failures.
+kmsg "debug proc/cmdline: $(cat /proc/cmdline 2>/dev/null)"
+kmsg "debug getarg nfsroot=$(getarg nfsroot= 2>/dev/null)"
+kmsg "debug getarg netroot=$(getarg netroot= 2>/dev/null)"
+
 # Try nfsroot= first; dracut's parse-nfsroot.sh may have consumed it and
 # rewritten it as netroot=nfs:IP:PATH:opts — fall back to that format.
+# Last resort: parse /proc/cmdline directly, bypassing getarg entirely.
 KICKSTART_IP=$(getarg nfsroot= | cut -d: -f1) || true
 if [ -z "${KICKSTART_IP}" ]; then
     KICKSTART_IP=$(getarg netroot= | sed 's|^nfs:\([^:]*\):.*|\1|') || true
+fi
+if [ -z "${KICKSTART_IP}" ]; then
+    _nfsroot=$(grep -o 'nfsroot=[^ ]*' /proc/cmdline 2>/dev/null)
+    _nfsroot=${_nfsroot#nfsroot=}
+    KICKSTART_IP=${_nfsroot%%:*}
 fi
 if [ -z "${KICKSTART_IP}" ]; then
     warn "overlayroot-nfs: cannot determine kickstart IP from nfsroot= or netroot="
