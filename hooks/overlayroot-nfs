@@ -91,13 +91,13 @@ fi
 kmsg "overlay mounted successfully"
 
 # Move all sub-mounts inside the new root so they remain accessible after pivot_root.
-# The sync service will write tmpfs upper back to NFS_STATE on shutdown.
-mkdir -p "${rootmnt}/run/overlayroot-lower"
-mkdir -p "${rootmnt}/run/overlayroot-upper"
-mkdir -p "${rootmnt}/run/overlayroot-nfs"
-mount --move "${LOWER}"       "${rootmnt}/run/overlayroot-lower"
-mount --move "${TMPFS_UPPER}" "${rootmnt}/run/overlayroot-upper"
-mount --move "${NFS_STATE}"   "${rootmnt}/run/overlayroot-nfs"
+# Use /.overlay/ (not /run/) — systemd remounts /run as a fresh tmpfs at boot.
+mkdir -p "${rootmnt}/.overlay/lower"
+mkdir -p "${rootmnt}/.overlay/upper"
+mkdir -p "${rootmnt}/.overlay/nfs"
+mount --move "${LOWER}"       "${rootmnt}/.overlay/lower"
+mount --move "${TMPFS_UPPER}" "${rootmnt}/.overlay/upper"
+mount --move "${NFS_STATE}"   "${rootmnt}/.overlay/nfs"
 
 kmsg "done: pivot_root handoff to ${OVERLAY_HOST}"
 log_end_msg

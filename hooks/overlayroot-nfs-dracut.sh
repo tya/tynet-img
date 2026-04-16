@@ -99,12 +99,14 @@ fi
 kmsg "overlay mounted successfully"
 
 # Move all sub-mounts inside the new root so they remain accessible after switch_root.
-# The sync service will write tmpfs upper back to NFS_STATE on shutdown.
-mkdir -p "${NEWROOT}/run/overlayroot-lower"
-mkdir -p "${NEWROOT}/run/overlayroot-upper"
-mkdir -p "${NEWROOT}/run/overlayroot-nfs"
-mount --move "${LOWER}"       "${NEWROOT}/run/overlayroot-lower"
-mount --move "${TMPFS_UPPER}" "${NEWROOT}/run/overlayroot-upper"
-mount --move "${NFS_STATE}"   "${NEWROOT}/run/overlayroot-nfs"
+# Use /.overlay/ (not /run/) — systemd remounts /run as a fresh tmpfs at boot,
+# which shadows anything placed there, breaking the overlayfs lower reference.
+# /.overlay/ is inside the overlay filesystem itself (tmpfs upper) and is safe.
+mkdir -p "${NEWROOT}/.overlay/lower"
+mkdir -p "${NEWROOT}/.overlay/upper"
+mkdir -p "${NEWROOT}/.overlay/nfs"
+mount --move "${LOWER}"       "${NEWROOT}/.overlay/lower"
+mount --move "${TMPFS_UPPER}" "${NEWROOT}/.overlay/upper"
+mount --move "${NFS_STATE}"   "${NEWROOT}/.overlay/nfs"
 
 kmsg "done: switch_root handoff to ${OVERLAY_HOST}"
