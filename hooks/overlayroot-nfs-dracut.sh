@@ -103,19 +103,4 @@ if ! mount -t overlay overlay \
     umount "${NFS_STATE}"
     exit 0
 fi
-kmsg "overlay mounted successfully"
-
-# Move all sub-mounts inside the new root so they remain accessible after switch_root.
-# Use /.overlay/ (not /run/) — systemd remounts /run as a fresh tmpfs at boot,
-# which shadows anything placed there, breaking the overlayfs lower reference.
-# /.overlay/ is inside the overlay filesystem itself (tmpfs upper) and is safe.
-mkdir -p "${NEWROOT}/.overlay/lower"
-mkdir -p "${NEWROOT}/.overlay/upper"
-mkdir -p "${NEWROOT}/.overlay/nfs"
-kmsg "overlay dirs created"
-mount --move "${LOWER}"       "${NEWROOT}/.overlay/lower"
-kmsg "lower moved to /.overlay/lower"
-mount --move "${TMPFS_UPPER}" "${NEWROOT}/.overlay/upper"
-kmsg "upper moved to /.overlay/upper"
-mount --move "${NFS_STATE}"   "${NEWROOT}/.overlay/nfs"
-kmsg "done: switch_root handoff to ${OVERLAY_HOST}"
+kmsg "done: overlay mounted — switch_root handoff to ${OVERLAY_HOST}"
