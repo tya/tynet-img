@@ -9,13 +9,13 @@
 #   /etc/systemd/system/overlayroot-nfs-sync.service
 #
 # Paths must match what overlayroot-nfs sets up:
-#   /.overlay/upper  — tmpfs with upper/ and work/ subdirs
-#   /.overlay/nfs    — NFS per-node state store (already mounted)
+#   /run/overlayroot-upper  — tmpfs with upper/ and work/ subdirs
+#   /run/overlayroot-nfs    — NFS per-node state store (already mounted)
 
 set -eu
 
-TMPFS_UPPER="/.overlay/upper"
-NFS_STATE="/.overlay/nfs"
+TMPFS_UPPER="/run/overlayroot-upper"
+NFS_STATE="/run/overlayroot-nfs"
 
 if [ ! -d "${TMPFS_UPPER}/upper" ]; then
     echo "overlayroot-nfs-sync: ${TMPFS_UPPER}/upper not found, nothing to sync" >&2
