@@ -55,7 +55,7 @@ kmsg "start: overlay for ${OVERLAY_HOST} kickstart=${KICKSTART_IP}"
 # Mount per-node NFS state store (read the saved upper layer from here)
 NFS_STATE="/run/overlayroot-nfs"
 mkdir -p "${NFS_STATE}"
-if ! mount -t nfs -o rw,nolock,vers=3 \
+if ! mount -t nfs -o rw,nolock,soft,timeo=100,retrans=2,vers=3 \
         "${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}" "${NFS_STATE}"; then
     warn "overlayroot-nfs: failed to mount NFS state store"
     kmsg "FAILED: could not mount NFS state store ${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}"
@@ -69,6 +69,7 @@ TMPFS_UPPER="/run/overlayroot-upper"
 mkdir -p "${TMPFS_UPPER}"
 mount -t tmpfs tmpfs "${TMPFS_UPPER}"
 mkdir -p "${TMPFS_UPPER}/upper" "${TMPFS_UPPER}/work"
+kmsg "tmpfs upper created"
 
 # Restore saved state from NFS into the tmpfs upper layer
 if [ -d "${NFS_STATE}/upper" ] && [ "$(ls -A "${NFS_STATE}/upper" 2>/dev/null)" ]; then
@@ -78,12 +79,18 @@ else
     kmsg "no saved state — starting fresh"
 fi
 
-# Bind-mount the current NFS root as the read-only lower layer
+# Bind-mount the current NFS root as the read-only lower layer.
+# Make it private immediately to prevent the overlay mount (which goes on
+# top of NEWROOT) from propagating back into this bind via shared propagation,
+# which would create a circular mount dependency and hang the kernel.
 LOWER="/run/overlayroot-lower"
 mkdir -p "${LOWER}"
 # shellcheck disable=SC2154  # NEWROOT is set by the dracut framework
 mount --bind "${NEWROOT}" "${LOWER}"
+mount --make-private "${LOWER}"
+kmsg "lower bind-mounted (private)"
 mount --bind -o remount,ro "${LOWER}"
+kmsg "lower remounted ro"
 
 # Mount overlayfs at NEWROOT
 if ! mount -t overlay overlay \
@@ -105,8 +112,10 @@ kmsg "overlay mounted successfully"
 mkdir -p "${NEWROOT}/.overlay/lower"
 mkdir -p "${NEWROOT}/.overlay/upper"
 mkdir -p "${NEWROOT}/.overlay/nfs"
+kmsg "overlay dirs created"
 mount --move "${LOWER}"       "${NEWROOT}/.overlay/lower"
+kmsg "lower moved to /.overlay/lower"
 mount --move "${TMPFS_UPPER}" "${NEWROOT}/.overlay/upper"
+kmsg "upper moved to /.overlay/upper"
 mount --move "${NFS_STATE}"   "${NEWROOT}/.overlay/nfs"
-
 kmsg "done: switch_root handoff to ${OVERLAY_HOST}"

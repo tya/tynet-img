@@ -70,11 +70,14 @@ else
     kmsg "no saved state — starting fresh"
 fi
 
-# Bind-mount the current NFS root as the read-only lower layer
+# Bind-mount the current NFS root as the read-only lower layer.
+# Make it private to prevent the overlay mount from propagating back into
+# this bind via shared propagation (circular mount dependency).
 LOWER="/run/overlayroot-lower"
 mkdir -p "${LOWER}"
 # shellcheck disable=SC2154  # rootmnt is set by the initramfs framework
 mount --bind "${rootmnt}" "${LOWER}"
+mount --make-private "${LOWER}"
 mount --bind -o remount,ro "${LOWER}"
 
 # Mount overlayfs at rootmnt

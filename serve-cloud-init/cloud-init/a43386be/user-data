@@ -12,6 +12,7 @@ users:
     lock_passwd: true
     ssh_authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEA9fmxTmPKwxfGw4WJtnJhGI+S1LxTe41sR3rKnZ1LC ty.alexander@gmail.com
 
 runcmd:
   - snap install microk8s --classic --channel=1.32/stable

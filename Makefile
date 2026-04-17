@@ -6,7 +6,7 @@ KICKSTART_IP  = 10.0.60.100
 
 .PHONY: help build build-linux test clean kickstart provision \
         update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% reboot-nodes \
-        pi1 pi2 pi3 pi logs status console
+        pi1 pi2 pi3 pi logs status console cycle-pi2 cycle-pi3
 
 .DEFAULT_GOAL := help
 
@@ -37,6 +37,8 @@ help:
 	@echo "  wipe-tftp              wipe all per-node TFTP dirs (re-run provision to repopulate)"
 	@echo "  wipe-tftp-<serial>     wipe a single node's TFTP dir (e.g. make wipe-tftp-244634d3)"
 	@echo "  reboot-nodes           drain and reboot all nodes via Ansible"
+	@echo "  cycle-pi2              power-cycle pi2 via Unifi PoE"
+	@echo "  cycle-pi3              power-cycle pi3 via Unifi PoE"
 	@echo "  status                 show per-node status (release, overlay, last sync)"
 	@echo "  console                listen for netconsole messages from booting nodes"
 	@echo "  logs                   show recent build log files"
@@ -124,6 +126,23 @@ wipe-all-overlays:
 # then uncordons after the node comes back up.
 reboot-nodes:
 	cd ansible && ansible-playbook playbooks/reboot-nodes.yml
+
+UNIFI_SWITCH_MAC = 18:e8:29:23:bf:22
+UNIFI_API       = https://unifi.tynet.us/proxy/network/api/s/default/cmd/devmgr
+
+cycle-pi2:
+	$(eval UNIFI_KEY := $(shell op read "op://Private/radius-user-importer/password"))
+	curl -sk -X POST "$(UNIFI_API)" \
+	  -H "X-API-KEY: $(UNIFI_KEY)" \
+	  -H "Content-Type: application/json" \
+	  -d '{"cmd":"power-cycle","mac":"$(UNIFI_SWITCH_MAC)","port_idx":6}' | jq .meta
+
+cycle-pi3:
+	$(eval UNIFI_KEY := $(shell op read "op://Private/radius-user-importer/password"))
+	curl -sk -X POST "$(UNIFI_API)" \
+	  -H "X-API-KEY: $(UNIFI_KEY)" \
+	  -H "Content-Type: application/json" \
+	  -d '{"cmd":"power-cycle","mac":"$(UNIFI_SWITCH_MAC)","port_idx":7}' | jq .meta
 
 status:
 	./check-status
