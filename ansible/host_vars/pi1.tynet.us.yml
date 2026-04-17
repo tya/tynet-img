@@ -1,5 +1,6 @@
 ---
 node_serial: ad36c642
+node_ip: 10.0.60.201
 node_mac: ""  # TODO: discover pi1 MAC (node has never booted)
 nfs_fsid: 1
 nfs_release: ubuntu-22.04

@@ -41,6 +41,31 @@ function customize_root {
 
   # disable resizefs
   touch "${root_dir}/etc/growroot-disabled"
+
+  # netplan: configure eth0 with DHCP and critical: true so systemd-networkd
+  # keeps the DHCP lease during startup and doesn't disrupt the NFS lower layer.
+  mkdir -p "${root_dir}/etc/netplan"
+  cat > "${root_dir}/etc/netplan/00-netboot.yaml" << 'NETPLAN'
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+      critical: true
+      dhcp4-overrides:
+        use-dns: true
+        use-routes: true
+NETPLAN
+
+  # Disable cloud-init network management: we configure networking via netplan
+  # above. Without this, cloud-init may overwrite our netplan or run dhcpcd,
+  # conflicting with systemd-networkd and disrupting the NFS connection.
+  mkdir -p "${root_dir}/etc/cloud/cloud.cfg.d"
+  cat > "${root_dir}/etc/cloud/cloud.cfg.d/99-netboot.cfg" << 'CLOUDINIT'
+# Disable cloud-init network management — handled by netplan/systemd-networkd
+network:
+  config: disabled
+CLOUDINIT
 }
 
 ##
