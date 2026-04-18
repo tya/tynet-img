@@ -139,8 +139,6 @@ DEOF
 Description=Sync overlay upper layer back to NFS state store
 DefaultDependencies=no
 Before=shutdown.target reboot.target halt.target
-Requires=network-online.target
-After=network-online.target
 
 [Service]
 Type=oneshot
