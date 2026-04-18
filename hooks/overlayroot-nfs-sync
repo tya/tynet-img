@@ -30,9 +30,11 @@ fi
 file_count=$(find "${TMPFS_UPPER}/upper" -mindepth 1 | wc -l | tr -d ' ')
 echo "overlayroot-nfs-sync: syncing ${file_count} files to NFS state store" >&2
 
-# Clear old state and replace with current tmpfs upper contents
-rm -rf "${NFS_STATE}/upper"
-mkdir -p "${NFS_STATE}/upper"
-cp -a "${TMPFS_UPPER}/upper/." "${NFS_STATE}/upper/"
+# Sync upper layer to NFS state store.
+# rsync --ignore-errors skips whiteout files (overlay char-dev 0/0) that NFS
+# cannot create via mknod — deleted files will reappear from the lower layer
+# on the next boot, but ordinary writes are preserved.
+rsync -a --ignore-errors --delete \
+    "${TMPFS_UPPER}/upper/" "${NFS_STATE}/upper/"
 
 echo "overlayroot-nfs-sync: done (${file_count} files synced)" >&2
