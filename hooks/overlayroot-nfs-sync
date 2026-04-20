@@ -34,7 +34,13 @@ echo "overlayroot-nfs-sync: syncing ${file_count} files to NFS state store" >&2
 # rsync --ignore-errors skips whiteout files (overlay char-dev 0/0) that NFS
 # cannot create via mknod — deleted files will reappear from the lower layer
 # on the next boot, but ordinary writes are preserved.
+# Exclude large volatile paths that are easily regenerated and would bloat
+# the state store and exhaust tmpfs on restore.
 rsync -a --ignore-errors --delete \
+    --exclude='/var/lib/apt/lists/' \
+    --exclude='/var/cache/apt/' \
+    --exclude='/var/cache/ldconfig/' \
+    --exclude='/tmp/' \
     "${TMPFS_UPPER}/upper/" "${NFS_STATE}/upper/"
 
 echo "overlayroot-nfs-sync: done (${file_count} files synced)" >&2
