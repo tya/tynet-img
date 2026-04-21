@@ -25,7 +25,8 @@ step_done() {
 ##
 # usage
 function usage {
-  echo "Usage: customize-img [kickstart_ip] [serial] [hostname]"
+  echo "Usage: customize-img [kickstart_ip] [serial] [hostname] [overlay_dev]"
+  echo "  overlay_dev  optional SSD partition for overlay upper layer, e.g. /dev/sda1"
 }
 
 ##
@@ -76,6 +77,7 @@ function customize_boot {
   local serial=${3}
   local hostname=${4}
   local root_dir=${5}
+  local overlay_dev=${6:-}
 
   # Newer raspi images use os_prefix=current/ for A/B updates, but TFTP netboot
   # needs files at the boot partition root. Flatten current/ into root and remove
@@ -85,10 +87,13 @@ function customize_boot {
     sed -i '/^os_prefix=/d' "${boot_dir}/config.txt"
   fi
 
-  # cmdline.txt - ro NFS root + overlay_host for per-node overlayfs
+  # cmdline.txt - ro NFS root + overlay_host for per-node overlayfs.
+  # Append overlay_dev= when an SSD upper layer device is specified.
   local kickstart_mac
   kickstart_mac=$(ip link show | awk '/link\/ether/{print $2}' | head -1 | tr -d ':')
-  local cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${ip}:${root_dir},vers=3 ro ip=dhcp rootwait swiotlb=noforce overlay_host=${hostname} netconsole=6665@/eth0,6666@${ip}/${kickstart_mac} ds=nocloud;s=http://${ip}:8000/${serial}/"
+  local overlay_dev_param=""
+  [[ -n "${overlay_dev}" ]] && overlay_dev_param=" overlay_dev=${overlay_dev}"
+  local cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${ip}:${root_dir},vers=3 ro ip=dhcp rootwait swiotlb=noforce overlay_host=${hostname}${overlay_dev_param} netconsole=6665@/eth0,6666@${ip}/${kickstart_mac} ds=nocloud;s=http://${ip}:8000/${serial}/"
   echo "${cmdline}" > "${boot_dir}/cmdline.txt"
 
   # Pi 4 netboot firmware — Ubuntu images don't ship start4.elf/fixup4.dat
@@ -206,6 +211,7 @@ function customize-img {
   local kickstart_ip=${1:?"kickstart_ip required"}
   local serial=${2:?"serial required"}
   local hostname=${3:-${serial}}
+  local overlay_dev=${4:-}
 
   # Set up log file and tee all stderr to it for the duration of this run.
   local logfile
@@ -218,6 +224,7 @@ function customize-img {
   log "  hostname:     ${hostname}"
   log "  serial:       ${serial}"
   log "  kickstart_ip: ${kickstart_ip}"
+  log "  overlay_dev:  ${overlay_dev:-"(none — tmpfs+NFS fallback)"}"
   log "  log:          ${logfile}"
   log "========================================"
 
@@ -237,7 +244,7 @@ function customize-img {
   log "    done (${SECONDS}s elapsed)"
 
   step "customize_boot"
-  customize_boot "${boot_dir}" "${kickstart_ip}" "${serial}" "${hostname}" "${root_dir}"
+  customize_boot "${boot_dir}" "${kickstart_ip}" "${serial}" "${hostname}" "${root_dir}" "${overlay_dev}"
   log "    done (${SECONDS}s elapsed)"
 
   step "install_overlay_hook"

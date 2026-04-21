@@ -23,8 +23,8 @@ if [ ! -d "${TMPFS_UPPER}/upper" ]; then
 fi
 
 if [ ! -d "${NFS_STATE}" ] || ! mountpoint -q "${NFS_STATE}"; then
-    echo "overlayroot-nfs-sync: NFS state store not mounted at ${NFS_STATE}" >&2
-    exit 1
+    echo "overlayroot-nfs-sync: NFS state store not mounted at ${NFS_STATE} (SSD mode or already unmounted)" >&2
+    exit 0
 fi
 
 file_count=$(find "${TMPFS_UPPER}/upper" -mindepth 1 | wc -l | tr -d ' ')

@@ -4,3 +4,4 @@ node_ip: 10.0.60.203
 node_mac: dc-a6-32-80-2a-cc
 nfs_fsid: 3
 nfs_release: ubuntu-26.04
+overlay_dev: /dev/sda1
