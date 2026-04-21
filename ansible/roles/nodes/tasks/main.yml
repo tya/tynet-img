@@ -5,9 +5,9 @@
   ansible.builtin.hostname:
     name: "{{ inventory_hostname_short }}"
 
-- name: Ensure ubuntu user SSH authorized keys
+- name: Ensure ty user SSH authorized keys
   ansible.posix.authorized_key:
-    user: ubuntu
+    user: ty
     state: present
     key: "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
 
