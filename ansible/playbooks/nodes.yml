@@ -1,0 +1,12 @@
+---
+# Configure Pi netboot nodes (hostname, authorized keys, SSH host key).
+#
+# Usage:
+#   ansible-playbook ansible/playbooks/nodes.yml -i inventory.ini
+#   ansible-playbook ansible/playbooks/nodes.yml -i inventory.ini --limit pi3.tynet.us
+
+- name: Configure Pi nodes
+  hosts: nodes
+  become: true
+  roles:
+    - nodes
