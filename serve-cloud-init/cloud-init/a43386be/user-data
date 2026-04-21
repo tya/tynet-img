@@ -1,8 +1,5 @@
 #cloud-config
 # pi3.tynet.us — HA control plane node
-# After this node boots, run 'microk8s add-node' on pi2 and execute the
-# resulting join command on this node:
-#   microk8s join <pi2-ip>:25000/<token>
 
 users:
   - name: ty
@@ -13,8 +10,3 @@ users:
     ssh_authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEA9fmxTmPKwxfGw4WJtnJhGI+S1LxTe41sR3rKnZ1LC ty.alexander@gmail.com
-
-runcmd:
-  - snap install microk8s --classic --channel=1.32/stable
-  - usermod -aG microk8s ty
-  - microk8s status --wait-ready --timeout 300
