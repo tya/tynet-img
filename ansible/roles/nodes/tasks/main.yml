@@ -15,7 +15,7 @@
 # across reboots, overlay resets, or SSD reformats.
 - name: Deploy SSH host private key
   ansible.builtin.copy:
-    content: "{{ lookup('pipe', 'op read \"op://Private/tynet infra ssh key/private key\"') }}\n"
+    content: "{{ lookup('env', 'SSH_HOST_PRIV_KEY') }}\n"
     dest: /etc/ssh/ssh_host_ed25519_key
     owner: root
     group: root
@@ -24,7 +24,7 @@
 
 - name: Deploy SSH host public key
   ansible.builtin.copy:
-    content: "{{ lookup('pipe', 'op read \"op://Private/tynet infra ssh key/public key\"') }}\n"
+    content: "{{ lookup('env', 'SSH_HOST_PUB_KEY') }}\n"
     dest: /etc/ssh/ssh_host_ed25519_key.pub
     owner: root
     group: root
