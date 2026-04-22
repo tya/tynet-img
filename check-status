@@ -5,10 +5,15 @@
 set -euo pipefail
 
 OVERLAY_DIR=/exports/overlay
-NODES=(pi1.tynet.us pi2.tynet.us pi3.tynet.us)
+NODES=(pi2.tynet.us pi3.tynet.us)
 
-printf "%-20s  %-8s  %-20s  %-8s  %s\n" "NODE" "STATUS" "RELEASE" "OVERLAY" "LAST SYNC"
-printf "%-20s  %-8s  %-20s  %-8s  %s\n" "----" "------" "-------" "-------" "---------"
+# 1Password public key fingerprint — expected SSH host key for all nodes
+EXPECTED_FP="SHA256:n6ooJKYiOdTmhUyOPG9OFj2BZjAvRcfvNzKnJBNkcQg"
+
+printf "%-20s  %-6s  %-18s  %-10s  %-10s  %-12s  %s\n" \
+  "NODE" "STATUS" "RELEASE" "OVERLAY" "UPPER" "SSH KEY" "LAST SYNC"
+printf "%-20s  %-6s  %-18s  %-10s  %-10s  %-12s  %s\n" \
+  "----" "------" "-------" "-------" "-----" "-------" "---------"
 
 for node in "${NODES[@]}"; do
   # Determine UP/DOWN by ping — showmount data can be stale
@@ -18,34 +23,63 @@ for node in "${NODES[@]}"; do
     status="DOWN"
   fi
 
-  # Get configured release from cmdline.txt — more reliable than showmount which can be stale.
-  # Works with both serial-keyed and MAC-keyed TFTP dirs.
+  # Get configured release and overlay_dev from cmdline.txt
   cmdline=$(grep -rl "overlay_host=${node}" /srv/tftpboot/ 2>/dev/null | head -1 || true)
   if [[ -n "${cmdline}" ]]; then
     release=$(grep -o 'nfsroot=[^ ]*' "${cmdline}" | sed 's|.*netboot/||;s|,.*||')
-  else
-    release="—"
-  fi
-
-  # Overlay: check /proc/mounts on the node if it's up
-  if [[ "${status}" == "UP" ]]; then
-    if ssh -o ConnectTimeout=3 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "${node}" \
-        "grep -q 'exports/overlay' /proc/mounts" 2>/dev/null; then
-      overlay="active"
+    if grep -q 'overlay_dev=' "${cmdline}" 2>/dev/null; then
+      configured_upper="ssd"
     else
-      overlay="none"
+      configured_upper="tmpfs"
     fi
   else
-    overlay="inactive"
+    release="—"
+    configured_upper="—"
+  fi
+
+  # Overlay mode and SSH key fingerprint — check on the node if it's up
+  if [[ "${status}" == "UP" ]]; then
+    node_info=$(ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "${node}" \
+      "df --output=size / 2>/dev/null | tail -1; ssh-keygen -l -f /etc/ssh/ssh_host_ed25519_key.pub 2>/dev/null || echo 'no-key'" \
+      2>/dev/null || echo "")
+
+    if [[ -n "${node_info}" ]]; then
+      overlay_size=$(echo "${node_info}" | head -1 | tr -d ' ')
+      # df size is in 1K blocks; SSD is > 100GB = 100M blocks
+      if [[ "${overlay_size}" -gt 100000000 ]] 2>/dev/null; then
+        upper="ssd"
+      else
+        upper="tmpfs"
+      fi
+
+      key_line=$(echo "${node_info}" | tail -1)
+      if [[ "${key_line}" == "no-key" ]]; then
+        ssh_key="missing"
+      else
+        actual_fp=$(echo "${key_line}" | awk '{print $2}')
+        if [[ "${actual_fp}" == "${EXPECTED_FP}" ]]; then
+          ssh_key="ok (1pw)"
+        else
+          ssh_key="WRONG KEY"
+        fi
+      fi
+    else
+      upper="?"
+      ssh_key="no-ssh"
+    fi
+  else
+    upper="—"
+    ssh_key="—"
   fi
 
   # Last sync: mtime of the overlay upper dir on kickstart
-  upper="${OVERLAY_DIR}/${node}/upper"
-  if [[ -d "${upper}" ]]; then
-    last_sync=$(stat -c '%y' "${upper}" | cut -c1-16)
+  upper_dir="${OVERLAY_DIR}/${node}/upper"
+  if [[ -d "${upper_dir}" ]]; then
+    last_sync=$(stat -c '%y' "${upper_dir}" | cut -c1-16)
   else
     last_sync="never"
   fi
 
-  printf "%-20s  %-8s  %-20s  %-8s  %s\n" "${node}" "${status}" "${release}" "${overlay}" "${last_sync}"
+  printf "%-20s  %-6s  %-18s  %-10s  %-10s  %-12s  %s\n" \
+    "${node}" "${status}" "${release}" "${configured_upper}" "${upper}" "${ssh_key}" "${last_sync}"
 done
