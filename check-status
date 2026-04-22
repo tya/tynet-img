@@ -4,8 +4,21 @@
 
 set -euo pipefail
 
+SCRIPT_DIR=$(dirname "$0")
 OVERLAY_DIR=/exports/overlay
-NODES=(pi2.tynet.us pi3.tynet.us)
+
+# Load node inventory from nodes.conf
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/nodes.conf"
+
+# Build fully-qualified hostname list from NODES short names
+HOSTNAMES=()
+for short in "${NODES[@]}"; do
+  key=${short^^}
+  ip_var="NODE_${key}_IP"
+  # Use hostname if resolvable, fall back to short name with domain
+  HOSTNAMES+=("${short}.tynet.us")
+done
 
 # 1Password public key fingerprint — expected SSH host key for all nodes
 EXPECTED_FP="SHA256:n6ooJKYiOdTmhUyOPG9OFj2BZjAvRcfvNzKnJBNkcQg"
@@ -15,7 +28,7 @@ printf "%-20s  %-6s  %-18s  %-10s  %-10s  %-12s  %s\n" \
 printf "%-20s  %-6s  %-18s  %-10s  %-10s  %-12s  %s\n" \
   "----" "------" "-------" "-------" "-----" "-------" "---------"
 
-for node in "${NODES[@]}"; do
+for node in "${HOSTNAMES[@]}"; do
   # Determine UP/DOWN by ping — showmount data can be stale
   if ping -c1 -W1 "${node}" &>/dev/null; then
     status="UP"

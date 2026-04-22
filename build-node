@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# build-node — provision a Pi node's TFTP directory and overlay dirs
+# Run on kickstart (requires root for mkdir on /srv/tftpboot and /exports/overlay).
+#
+# Usage: build-node <hostname>
+#   hostname  e.g. pi2.tynet.us or pi2
+#
+# Reads node config from nodes.conf in the same directory.
+# Syncs boot files from /exports/netboot/<release>/boot/ to /srv/tftpboot/<mac>/,
+# writes per-node cmdline.txt, and creates overlay dirs.
+
+set -euo pipefail
+
+SCRIPT_DIR=$(dirname "$0")
+
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
+
+function usage {
+  echo "Usage: build-node <hostname>"
+  echo "  hostname  e.g. pi2.tynet.us or pi2"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage; exit 0
+fi
+
+hostname=${1:?"hostname required — Usage: build-node <hostname>"}
+
+# Source node inventory
+conf="${SCRIPT_DIR}/nodes.conf"
+[[ -f "${conf}" ]] || { log "ERROR: nodes.conf not found at ${conf}"; exit 1; }
+# shellcheck source=/dev/null
+source "${conf}"
+
+# Resolve short name: strip domain if given (pi2.tynet.us → pi2)
+short=${hostname%%.*}
+key=${short^^}  # uppercase for variable lookup: pi2 → PI2
+
+# Look up node config
+serial_var="NODE_${key}_SERIAL"
+mac_var="NODE_${key}_MAC"
+ip_var="NODE_${key}_IP"
+release_var="NODE_${key}_RELEASE"
+overlay_dev_var="NODE_${key}_OVERLAY_DEV"
+
+serial=${!serial_var:-}
+mac=${!mac_var:-}
+node_ip=${!ip_var:-}
+nfs_release=${!release_var:-}
+overlay_dev=${!overlay_dev_var:-}
+
+[[ -n "${serial}"      ]] || { log "ERROR: ${serial_var} not set in nodes.conf"; exit 1; }
+[[ -n "${mac}"         ]] || { log "ERROR: ${mac_var} not set in nodes.conf"; exit 1; }
+[[ -n "${node_ip}"     ]] || { log "ERROR: ${ip_var} not set in nodes.conf"; exit 1; }
+[[ -n "${nfs_release}" ]] || { log "ERROR: ${release_var} not set in nodes.conf"; exit 1; }
+
+root_dir="/exports/netboot/${nfs_release}"
+tftp_dir="/srv/tftpboot/${mac}"
+overlay_dir="/exports/overlay/${hostname}"
+
+log "========================================"
+log "build-node: ${hostname}"
+log "  serial:      ${serial}"
+log "  mac:         ${mac}"
+log "  ip:          ${node_ip}"
+log "  release:     ${nfs_release}"
+log "  overlay_dev: ${overlay_dev:-(none — tmpfs+NFS fallback)}"
+log "  tftp_dir:    ${tftp_dir}"
+log "========================================"
+
+[[ -d "${root_dir}/usr" ]] \
+  || { log "ERROR: ${root_dir} does not exist or is not a valid image — run customize-img ${nfs_release} first"; exit 1; }
+
+# 1. Create TFTP directory
+log "--- create TFTP dir"
+mkdir -p "${tftp_dir}"
+
+# 2. Sync boot files (firmware, kernel, DTBs, overlays) from shared image
+log "--- sync boot files"
+rsync -a --update "${root_dir}/boot/" "${tftp_dir}/"
+chmod -R a+r "${tftp_dir}/"
+
+# 3. Write per-node cmdline.txt
+log "--- write cmdline.txt"
+overlay_dev_param=""
+[[ -n "${overlay_dev}" ]] && overlay_dev_param=" overlay_dev=${overlay_dev}"
+cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${KICKSTART_IP}:${root_dir},vers=3 ro ip=dhcp rootwait swiotlb=noforce overlay_host=${hostname}${overlay_dev_param} netconsole=6665@${node_ip}/eth0,6666@${KICKSTART_IP}/${KICKSTART_MAC} ds=nocloud;s=http://${KICKSTART_IP}:8000/${serial}/"
+echo "${cmdline}" > "${tftp_dir}/cmdline.txt"
+
+# 4. Create overlay dirs
+log "--- create overlay dirs"
+mkdir -p "${overlay_dir}/upper" "${overlay_dir}/work"
+
+log "========================================"
+log "build-node SUCCESS — ${hostname}"
+log "  tftp:    ${tftp_dir}/cmdline.txt"
+log "  overlay: ${overlay_dir}/{upper,work}"
+log "========================================"

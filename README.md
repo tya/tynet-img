@@ -1,317 +1,229 @@
 # tynet-img
 
-Scripts for provisioning Raspberry Pi nodes via network boot (NFS root + TFTP boot + cloud-init).
+Scripts for building Raspberry Pi netboot images and provisioning nodes. Bash-only — kickstart host provisioning (packages, services, NFS config) lives in `../tynet-infra`.
 
 ## How it works
 
-A Pi boots over the network by fetching its kernel and boot files via TFTP, then mounting its root filesystem over NFS. Each node gets a persistent writable overlay over the shared read-only base image. cloud-init runs on first boot and fetches its configuration from an HTTP server on the kickstart host, keyed by the Pi's serial number.
+A Pi boots over the network by fetching its kernel and boot files via TFTP, then mounting its root filesystem over NFS. Each node gets a persistent writable overlay over the shared read-only base image. cloud-init runs on first boot.
 
 ```
 Pi (power on)
   └── DHCP  → gets TFTP server IP from UniFi (option 66)
-  └── TFTP  → /srv/tftpboot/<serial>/         (boot files + cmdline.txt)
-  └── NFS   → /exports/netboot/ubuntu-22.04/  (shared read-only root)
-  └── NFS   → /exports/overlay/<hostname>/    (per-node NFS state store)
+  └── TFTP  → /srv/tftpboot/<mac>/            (boot files + cmdline.txt)
+  └── NFS   → /exports/netboot/<release>/     (shared read-only root)
+  └── NFS   → /exports/overlay/<hostname>/   (per-node state store)
   └── HTTP  → :8000/<serial>/                 (cloud-init user-data + meta-data)
 ```
 
-All services are hosted on the kickstart host (`kickstart.tynet.us`, `10.0.60.100`).
-
 ## Infrastructure
 
-- **Kickstart host**: `kickstart.tynet.us` — Raspberry Pi aarch64, DHCP reservation `10.0.60.100`
+- **Kickstart host**: `kickstart.tynet.us` — Raspberry Pi aarch64, `10.0.60.100`
 - **Pi VLAN**: `10.0.60.0/24`, gateway `10.0.60.1`
-- **Pi nodes**: pi1–pi3, DHCP reservations `10.0.60.201`–`10.0.60.203` (managed in Unifi)
-- **UniFi Network Boot**: set to `10.0.60.100` on VLAN 60 (DHCP option 66)
-
-## Overlay filesystem
-
-Each Pi runs an overlayfs stack to get a writable root without modifying the shared base:
-
-```
-overlayfs (visible root)
-  ├── upper  →  tmpfs  (RAM-backed writes during runtime)
-  └── lower  →  NFS    (shared read-only base image)
-```
-
-### Why tmpfs for the upper layer
-
-Linux 6.x requires `RENAME_WHITEOUT` support on the overlayfs upper layer. NFS does not provide this syscall, so the upper layer must be tmpfs (RAM-backed). This means all writes during runtime live in RAM and are lost on power loss unless explicitly synced.
-
-### State persistence across reboots
-
-To survive reboots, the `overlayroot-nfs-sync` systemd shutdown service runs before the machine halts or reboots. It rsyncs the tmpfs upper layer to a per-node NFS state store at `/exports/overlay/<hostname>/upper/` on the kickstart host. On the next boot, the `overlayroot-nfs` initramfs hook copies the saved state from NFS back into a fresh tmpfs before mounting the overlay, restoring the node to where it left off.
-
-### Boot sequence (initramfs detail)
-
-The `overlayroot-nfs` hook runs as an `init-bottom` initramfs script — after the NFS root is mounted but before `pivot_root` hands control to the OS. It:
-
-1. Reads `overlay_host=<hostname>` from the kernel cmdline
-2. Derives the kickstart IP from `nfsroot=<ip>:...` in the kernel cmdline
-3. Mounts `<kickstart>:/exports/overlay/<hostname>` as the NFS state store (read-write, NFSv3)
-4. Creates a tmpfs at `/run/overlayroot-upper` with `upper/` and `work/` subdirs
-5. Copies any saved state from the NFS state store into the tmpfs upper layer (state restore)
-6. Bind-mounts the NFS root (`rootmnt`) as a read-only lower layer
-7. Mounts overlayfs: `lower=NFS root, upper=tmpfs/upper, workdir=tmpfs/work`
-8. Moves all sub-mounts into the new root so they remain accessible after `pivot_root`
-
-If any step fails, the hook falls back to booting plain NFS root (no overlay) so the node still comes up.
-
-### initramfs rebuild with systemd-nspawn
-
-After installing the `overlayroot-nfs` hook into the image, `customize-img` must rebuild the initramfs so the hook is included. This is done by running `update-initramfs -c -k all` inside the extracted image using `systemd-nspawn`:
-
-```
-systemd-nspawn -D /exports/netboot/ubuntu-22.04 update-initramfs -c -k all
-```
-
-`systemd-nspawn` is used instead of a bare `chroot` because:
-
-- It automatically bind-mounts `/proc`, `/sys`, and a fresh `/dev` inside the container, which `update-initramfs` needs
-- It handles the `/dev` requirement cleanly — `customize-img` pre-mounts a tmpfs on `<root>/dev` before spawning, because nspawn requires `/dev` to be a pre-mounted filesystem rather than a populated directory
-- It properly isolates the container from the host, preventing accidental host modifications
-
-The pre-mounted tmpfs on `/dev` is cleaned up via a `trap` on function return.
+- **Pi nodes**: pi2–pi3, DHCP reservations `10.0.60.202`–`10.0.60.203` (managed in Unifi)
+- **UniFi Network Boot**: DHCP option 66 = `10.0.60.100` on VLAN 60
 
 ## Scripts
 
-### `extract-img [URL] [DST]`
-Downloads an Ubuntu ARM64 preinstalled image, extracts it, and rsyncs the root and boot partitions to a local directory.
+### `extract-img [nfs_release]`
 
-- Caches the downloaded `.img` in `/var/cache/img/` — re-runs are fast
-- Defaults to the Ubuntu 22.04 LTS raspi arm64 image
-- Defaults destination to `/exports/netboot/<image-name>/`
-- Skips download and rsync if the destination is already populated — re-runs after a failed build are fast
-- Writes the destination path to stdout
+Downloads and extracts an Ubuntu ARM64 preinstalled image to `/exports/netboot/<nfs_release>/`.
+
+- Release name maps to URL via `IMAGE_URLS` table inside the script — add new releases there
+- Caches the downloaded `.img` in `/var/cache/img/` — re-runs after a failed build are fast
+- Skips extract if destination is already populated
 
 ```bash
-sudo ./extract-img
-sudo ./extract-img https://cdimage.ubuntu.com/.../ubuntu-22.04.5-...img.xz /exports/netboot/ubuntu-22.04
+sudo ./extract-img ubuntu-22.04
+sudo ./extract-img ubuntu-26.04
 ```
 
-### `customize-img [KICKSTART_IP] [SERIAL] [HOSTNAME]`
-Calls `extract-img`, then modifies the extracted filesystem for netboot:
+### `customize-img [nfs_release]`
 
-- Writes `cmdline.txt` with NFS root (read-only), `swiotlb=noforce`, `overlay_host=<hostname>`, and cloud-init URL
-- Downloads Pi 4 firmware files (`start4.elf`, `fixup4.dat`) into the boot partition
-- Empties `/etc/fstab` so systemd does not remount the overlay root from NFS (which would override it read-only)
+Modifies the shared base image at `/exports/netboot/<nfs_release>/` for NFS netboot. **Node-agnostic** — run once per release, not per node.
+
+- Calls `extract-img` to ensure the base image exists
+- Empties `/etc/fstab` — prevents systemd from remounting the NFS root over the overlay
 - Disables growroot
-- Installs the `overlayroot-nfs` initramfs hook
-- Installs the `overlayroot-nfs-sync` shutdown service for overlay state persistence
-- Rebuilds the initramfs via `systemd-nspawn` so the hook is included
-- Writes the root directory path to stdout
+- Writes netplan config for eth0 DHCP with `critical: true`
+- Disables cloud-init network management (handled by netplan)
+- Flattens `os_prefix=current/` boot layout for TFTP compatibility
+- Downloads Pi 4 firmware (`start4.elf`, `fixup4.dat`) into the boot dir
+- Installs `overlayroot-nfs` initramfs hook (dracut or initramfs-tools, auto-detected)
+- Installs `overlayroot-nfs-sync` shutdown service
+- Rebuilds initramfs via `systemd-nspawn`
+- Validates the hook is present in the rebuilt initramfs
 
 ```bash
-sudo ./customize-img 10.0.60.100 244634d3 pi2   # kickstart_ip serial hostname
+sudo ./customize-img ubuntu-22.04
+sudo ./customize-img ubuntu-26.04
+
+# Or via Makefile:
+make ubuntu-22.04
+make ubuntu-26.04
 ```
 
-Or via Makefile targets (run on kickstart host):
+### `build-node <hostname>`
+
+Provisions a single node's TFTP directory and overlay dirs. Reads all config from `nodes.conf`.
+
+- Syncs boot files from `/exports/netboot/<release>/boot/` → `/srv/tftpboot/<mac>/`
+- Writes per-node `/srv/tftpboot/<mac>/cmdline.txt` (NFS root, overlay_host, overlay_dev, netconsole, cloud-init URL)
+- Creates `/exports/overlay/<hostname>/upper` and `/exports/overlay/<hostname>/work`
+
 ```bash
+sudo ./build-node pi2.tynet.us
+sudo ./build-node pi3.tynet.us
+
+# Or via Makefile:
 make pi2
 make pi3
+make pi   # all nodes
 ```
 
-### `serve-cloud-init [-dir DIR] [-addr ADDR]`
-Go program that serves per-node cloud-init seed data over HTTP on port 8000. Managed as a systemd service by Ansible; can also be run manually.
+### `nodes.conf`
+
+Bash-sourceable node inventory. Used by `build-node` and `check-status`. Edit this to add or reconfigure nodes.
+
+```bash
+KICKSTART_IP=10.0.60.100
+KICKSTART_MAC=dca632807952
+
+NODES=(pi2 pi3)
+
+NODE_PI2_SERIAL=244634d3
+NODE_PI2_MAC=dc-a6-32-8d-f3-ca
+NODE_PI2_IP=10.0.60.202
+NODE_PI2_RELEASE=ubuntu-22.04
+
+NODE_PI3_SERIAL=a43386be
+NODE_PI3_MAC=dc-a6-32-80-2a-cc
+NODE_PI3_IP=10.0.60.203
+NODE_PI3_RELEASE=ubuntu-26.04
+NODE_PI3_OVERLAY_DEV=/dev/sda1   # optional: SSD upper layer
+```
+
+### `serve-cloud-init`
+
+Go program serving per-node cloud-init seed data over HTTP on port 8000. Managed as a systemd service by the kickstart Ansible role in tynet-infra.
 
 ```bash
 ./serve-cloud-init -dir ~/src/tynet-img/serve-cloud-init/cloud-init
-./serve-cloud-init -dir ~/src/tynet-img/serve-cloud-init/cloud-init -addr :9000
 ```
 
-## Per-node cloud-init data
+Seed files live in `serve-cloud-init/cloud-init/<serial>/` (`meta-data` + `user-data`).
 
-Seed files live in `serve-cloud-init/cloud-init/<serial>/` and are served to each node on first boot.
+## Overlay filesystem
+
+Each Pi runs overlayfs for a writable root without modifying the shared base:
 
 ```
-serve-cloud-init/cloud-init/
-  ad36c642/        # pi1.tynet.us
-  244634d3/        # pi2.tynet.us
-  a43386be/        # pi3.tynet.us
-  testnode/        # VM test node
+overlayfs (visible root)
+  ├── upper  →  tmpfs or SSD  (writable layer)
+  └── lower  →  NFS           (shared read-only base image)
 ```
 
-Each directory contains `meta-data` (instance ID + hostname) and `user-data` (standard `#cloud-config`).
+The upper layer is tmpfs by default (Linux 6.x requires `RENAME_WHITEOUT` support on upper, which NFS lacks). If `overlay_dev=/dev/sda1` is set in `nodes.conf`, the `overlayroot-nfs` hook mounts the SSD as upper instead.
 
-Node IPs are managed as DHCP reservations in Unifi — not hardcoded in cloud-init.
+### State persistence (tmpfs mode)
 
-## Building serve-cloud-init
+`overlayroot-nfs-sync` runs at shutdown and rsyncs the tmpfs upper to `/exports/overlay/<hostname>/upper/` on kickstart. On next boot the initramfs hook restores it into a fresh tmpfs before mounting the overlay.
 
-Requires Go 1.22+.
+### initramfs hook
+
+`overlayroot-nfs` (or the dracut equivalent) runs as `init-bottom` — after NFS root is mounted, before `pivot_root`. It sets up the overlay stack and falls back to plain NFS root on any failure.
+
+`customize-img` rebuilds the initramfs with `systemd-nspawn` (not bare chroot) because nspawn auto-mounts `/proc`, `/sys`, `/dev` that `update-initramfs` requires.
+
+## Kickstart host provisioning
+
+Kickstart host setup (packages, tftpd, NFS exports, cloud-init service) is managed by Ansible in `../tynet-infra`:
 
 ```bash
-make        # build for local machine
-make test   # run Go unit tests
-make clean  # remove binary
+cd ../tynet-infra
+make kickstart       # provision kickstart host
+make nodes           # deploy SSH host keys to Pi nodes (from 1Password)
+make reboot-nodes    # graceful drain + reboot all nodes
 ```
 
-Source lives in `serve-cloud-init/`. The binary is written to `./serve-cloud-init`.
+NFS exports are auto-generated from `/exports/netboot/` release dirs. Re-run `make kickstart` after adding a new release.
 
-## Provisioning the kickstart host
+## Makefile reference
 
-The kickstart host is configured with Ansible from your Mac. This installs all required packages (kpartx, nfs-kernel-server, tftpd-hpa, golang-go, systemd-container, qemu-user-static, etc.), configures services, deploys the serve-cloud-init systemd service, sets up NFS exports and per-node overlay/TFTP directories, and installs a daily timer to apply security updates to the base image.
-
-**Mac prerequisites:**
-```bash
-brew install ansible
-```
-
-**Provision production from Mac:**
-```bash
-make kickstart
-```
-
-**Provision kickstart from kickstart itself (no SSH needed):**
-```bash
-make provision
-```
-
-**Provision the local VM kickstart (test env only):**
-```bash
-cd vms && make provision
-```
-
-All use the same Ansible playbook (`ansible/playbooks/kickstart.yml`) with different inventories:
-
-```
-ansible/
-  inventory.ini        # production: SSH from Mac
-  inventory-local.ini  # production: local connection from kickstart itself
-  inventory-vm.ini     # VM test environment: lima-kickstart + testnode
-  group_vars/all.yml   # shared vars (subnet, kickstart_ip)
-  host_vars/           # per-node config (node_serial, nfs_fsid)
-  playbooks/
-    kickstart.yml      # configure kickstart host
-  roles/
-    kickstart/         # packages, TFTP, NFS, cloud-init service,
-                       #   overlay dirs, NFS exports, update-base timer
-```
-
-NFS exports are auto-discovered from `/exports/netboot/` — adding or removing a release dir and re-running `make provision` updates `/etc/exports` automatically.
-
-**What stays in shell scripts vs Ansible:**
-
-| Shell scripts | Ansible |
-|---|---|
-| `extract-img` — download + extract base image | Kickstart host packages and services |
-| `customize-img` — overlayfs hooks, cmdline.txt, initramfs rebuild | Per-node NFS exports and TFTP dirs |
-
-## Maintenance
-
-Run these on the kickstart host:
+Run on kickstart host:
 
 ```bash
-# Apply security updates to the shared base image
-make update-base
+make ubuntu-22.04        # build base image for ubuntu-22.04
+make ubuntu-26.04        # build base image for ubuntu-26.04
+make pi2                 # provision pi2.tynet.us TFTP dir
+make pi3                 # provision pi3.tynet.us TFTP dir
+make pi                  # provision all nodes
 
-# Wipe a single node's overlay (node must be offline first)
-make wipe-overlay-pi2
+make update-base                      # apply security patches (default: ubuntu-22.04)
+make update-base RELEASE=ubuntu-26.04
 
-# Wipe all nodes' overlays (use after update-base before rebooting)
+make wipe-overlay-pi2    # wipe pi2's overlay (node must be offline)
 make wipe-all-overlays CONFIRM=yes
 
-# Reboot all nodes via Ansible
-make reboot-nodes
+make status              # show per-node status (release, overlay mode, SSH key)
+make console             # listen for netconsole boot messages
+make logs                # show recent customize-img run history
 
-# Remove a stale release directory from /exports/netboot/
-make wipe-release-ubuntu-26.04
-
-# Wipe all per-node TFTP dirs (re-run provision to repopulate)
-make wipe-tftp
-
-# Wipe a single node's TFTP dir by serial number
-make wipe-tftp-a43386be
+make cycle-pi2           # power-cycle pi2 via Unifi PoE
+make cycle-pi3           # power-cycle pi3 via Unifi PoE
 ```
 
-**Typical base image update flow:**
+## Provisioning a new node
+
 ```bash
-make update-base                        # patch the shared NFS root
-make wipe-all-overlays CONFIRM=yes      # clear per-node upper layers
-make reboot-nodes                       # restart nodes against updated base
-```
+# 1. Add node block to nodes.conf (serial, MAC, IP, release)
 
-The kickstart host also runs an `update-base.timer` systemd unit that applies updates daily at 03:00 (with a random 30-minute delay). After an automated update you should wipe overlays and reboot nodes manually.
+# 2. Add cloud-init seed data:
+#    serve-cloud-init/cloud-init/<serial>/meta-data
+#    serve-cloud-init/cloud-init/<serial>/user-data
+
+# 3. Add DHCP reservation in Unifi (MAC → IP)
+
+# 4. Re-run kickstart Ansible to update NFS exports:
+cd ../tynet-infra && make kickstart
+
+# 5. Build base image if not already done:
+make ubuntu-22.04    # or ubuntu-26.04
+
+# 6. Provision the node's TFTP dir:
+make pi2   # or whichever node
+
+# 7. Deploy SSH host key:
+cd ../tynet-infra && make nodes LIMIT=pi2.tynet.us
+
+# 8. Power on — node netboots and runs cloud-init
+```
 
 ## Logging
 
-`customize-img` and `extract-img` write timestamped logs to `/var/log/tynet-img/` on kickstart, one file per run. A `latest.log` symlink always points to the most recent build.
+`customize-img` and `build-node` write timestamped logs to `/var/log/tynet-img/` on kickstart.
 
 ```bash
-# Watch a live build
-tail -f /var/log/tynet-img/latest.log
-
-# See recent run history (node, outcome, path)
-make logs
-
-# Read a specific run
-cat /var/log/tynet-img/customize-img-20260402-143022-pi3.tynet.us.log
+tail -f /var/log/tynet-img/latest.log   # follow live build
+make logs                                # recent run history
 ```
 
-Each log records the hostname, serial, kickstart IP, elapsed time per step, and a final SUCCESS or FAILED line.
+## Node inventory
 
-## Provisioning a new node (end-to-end)
+| Hostname           | Serial   | MAC               | IP            |
+|--------------------|----------|-------------------|---------------|
+| kickstart.tynet.us | —        | dc:a6:32:80:79:52 | 10.0.60.100   |
+| pi2.tynet.us       | 244634d3 | dc:a6:32:8d:f3:ca | 10.0.60.202   |
+| pi3.tynet.us       | a43386be | dc:a6:32:80:2a:cc | 10.0.60.203   |
 
-```bash
-# 1. Add host_vars entry: ansible/host_vars/<hostname>.yml
-#    Fields: node_serial, nfs_fsid
+## VM test environment
 
-# 2. Add cloud-init seed data: serve-cloud-init/cloud-init/<serial>/
-#    Files: meta-data, user-data
-
-# 3. Add DHCP reservation in Unifi for the node's MAC → desired IP
-
-# 4. Provision the kickstart host (creates NFS exports + TFTP dirs)
-make kickstart
-
-# 5. On the kickstart host: build the netboot image
-make pi2   # or pi3, etc.
-
-# 6. Power on the Pi — it will netboot and run cloud-init on first boot
-```
-
-## Setting up a new kickstart host (SD card)
-
-Cloud-init seed files for the kickstart host live in `setup/kickstart/`:
-
-```
-setup/kickstart/
-  user-data       # cloud-config: hostname, user, timezone, packages
-  meta-data       # instance-id + local-hostname
-  network-config  # DHCP on eth0
-```
-
-Flash Ubuntu to an SD card with Raspberry Pi Imager, then copy these files to the boot partition (`/boot/firmware/`) before first boot. After boot, run `make kickstart`.
-
-## Local VM test environment
-
-A Lima-based two-VM environment for testing the full netboot stack on Apple Silicon without real hardware. **Test environment only** — production runs on `kickstart.tynet.us`.
-
-**Mac prerequisites:**
-```bash
-brew install lima ansible
-brew install socket_vmnet   # for VM-to-VM networking
-```
+Lima-based two-VM stack for testing on Apple Silicon. **Test only** — production runs on kickstart.tynet.us.
 
 ```bash
 cd vms
-make start      # start both VMs (kickstart + node)
-make provision  # run Ansible against kickstart VM
-make test       # run integration tests from the node VM
+make start      # start kickstart + node VMs
+make provision  # provision kickstart VM
 make kickstart  # shell into kickstart VM
 make node       # shell into node VM
-make stop       # stop both VMs
-make clean      # delete both VMs
-```
-
-The kickstart VM is fixed at `192.168.105.10`. After `make provision`, build the base image from inside the kickstart VM:
-
-```bash
-cd /Users/ty/src/tynet-img
-sudo ./customize-img 192.168.105.10 testnode testnode
-```
-
-Then run the integration tests:
-
-```bash
-cd vms && make test
+make stop
 ```

@@ -4,46 +4,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repo contains bash scripts and Ansible for setting up Raspberry Pi netboot infrastructure. The flow is:
+This repo contains bash scripts for building Raspberry Pi netboot images and provisioning nodes. It is bash-only — no Ansible. Kickstart host provisioning (packages, services, NFS config) lives in `../tynet-infra`.
 
-1. `extract-img` — downloads an Ubuntu ARM64 preinstalled image (`.img.xz`), extracts it, mounts it via `kpartx`, and rsyncs the root/boot partitions to `/exports/netboot/<name>/`
-2. `customize-img` — calls `extract-img`, then modifies the extracted filesystem for NFS netboot: sets `cmdline.txt` to boot via NFS, updates `/etc/fstab`, disables growroot, installs the `hooks/overlayroot-nfs` initramfs hook, and rebuilds the initramfs via `systemd-nspawn`
+The flow is:
+
+1. `extract-img <nfs_release>` — downloads an Ubuntu ARM64 preinstalled image, extracts it to `/exports/netboot/<nfs_release>/`
+2. `customize-img <nfs_release>` — calls `extract-img`, then modifies the shared base image for NFS netboot: fstab, netplan, cloud-init network config, overlayroot-nfs initramfs hook, initramfs rebuild. **Node-agnostic** — no per-node params.
+3. `build-node <hostname>` — provisions a single node's TFTP directory: syncs boot files from the base image, writes `cmdline.txt`, creates overlay dirs. Reads config from `nodes.conf`.
 
 ## Repository layout
 
 ```
-customize-img          # entry point: build a netboot image
-extract-img            # helper: download + extract Ubuntu ARM64 image
+customize-img          # customize shared base image for NFS netboot (node-agnostic)
+extract-img            # download + extract Ubuntu ARM64 image
+build-node             # provision per-node TFTP dir + overlay dirs
+nodes.conf             # node inventory (MACs, serials, IPs, releases) — bash-sourceable
 hooks/
   overlayroot-nfs      # initramfs hook — sets up overlayfs on boot
   overlayroot-nfs-sync # systemd shutdown service — syncs tmpfs upper to NFS state store
 serve-cloud-init/
   main.go              # HTTP server for per-node cloud-init seed data
   cloud-init/          # per-node seed files (meta-data + user-data), keyed by serial
-ansible/               # kickstart host provisioning (packages, NFS, TFTP, cloud-init service)
-  group_vars/all.yml   # shared vars (subnet = 10.0.60.0/24)
-  host_vars/           # per-node config (node_serial, nfs_fsid)
-  inventory.ini        # production inventory
-  inventory-vm.ini     # VM test environment inventory
 setup/
   kickstart/           # cloud-init seed files for flashing kickstart SD card
 vms/                   # Lima VM test environment (kickstart + node) — TEST ONLY
 tmp/                   # gitignored local runtime artifacts (cache, exports)
 ```
 
+Kickstart host provisioning (packages, tftpd, NFS, cloud-init service) lives in `../tynet-infra` — run `make kickstart` from there.
+
 ## Running the scripts
 
-All scripts require `sudo` / root. They must be run on the Linux server acting as the netboot host (not macOS).
+All scripts require `sudo` / root. They must be run on the kickstart host (`kickstart.tynet.us`, Linux aarch64).
 
-The Lima VM environment (`vms/`) is a **test environment only**. Production image builds and serving run on `kickstart.tynet.us` (aarch64 Raspberry Pi).
+The Lima VM environment (`vms/`) is a **test environment only**.
 
 ```bash
-# Extract and customize an image for netboot
-sudo ./customize-img [kickstart_ip] [serial] [hostname]
+# Build the shared base image (once per release):
+sudo ./customize-img ubuntu-22.04
+sudo ./customize-img ubuntu-26.04
 
-# Or via Makefile targets (run on kickstart host):
-make pi2
-make pi3
+# Provision a node's TFTP dir (after customize-img):
+sudo ./build-node pi2.tynet.us
+sudo ./build-node pi3.tynet.us
+
+# Or via Makefile:
+make ubuntu-22.04     # build base image
+make pi2              # provision pi2 TFTP dir
+make pi               # provision all nodes
 ```
 
 ## Network
@@ -62,14 +70,15 @@ make pi3
 
 ## Key design details
 
-- Scripts write human-readable output to **stderr** and machine-readable output (paths) to **stdout**.
-- The default image is Ubuntu 22.04 snapshot (arm64). The destination defaults to `/exports/netboot/<image-basename>`.
+- Scripts write human-readable output to **stderr** only. `customize-img` and `build-node` do not write to stdout.
+- `extract-img` takes a release name (`ubuntu-22.04`, `ubuntu-26.04`); the URL map is inside the script. Add new releases there.
 - `extract-img` caches the downloaded `.img` in `/var/cache/img/` and skips re-download if already present. rsync exit code 23 (partial transfer due to special files) is treated as success.
-- `customize-img` validates that `root_dir` points to a real OS tree (`usr/` present) before modifying anything — prevents host corruption if `extract-img` fails.
-- The boot partition is served via TFTP; the root partition is served via NFSv3.
-- Server-side configuration (NFS exports, TFTP dirs, overlay dirs, cloud-init service) is handled entirely by Ansible — the shell scripts only build the image.
-- The NFS root `cmdline.txt` uses `ds=nocloud;s=http://<kickstart_ip>:8000/<serial>/` for cloud-init.
-- NFS exports use `10.0.60.0/24` subnet restriction (not per-node IPs) — set in `ansible/group_vars/all.yml`.
+- `customize-img` validates that `root_dir` (`/exports/netboot/<release>/`) contains `usr/` before modifying — prevents host corruption if extraction fails.
+- `customize-img` is **node-agnostic**: it customizes the shared base image only. No `serial`, `hostname`, or `overlay_dev` params.
+- `build-node` reads all per-node config from `nodes.conf` (sourced as bash). To add a node: add a `NODE_<SHORTNAME>_*` block to `nodes.conf` and re-run `make kickstart` in tynet-infra to update `/etc/exports`.
+- TFTP dirs are keyed by MAC address (`/srv/tftpboot/<mac>/`) matching Pi EEPROM `TFTP_PREFIX=2` behaviour.
+- `cmdline.txt` uses `ds=nocloud;s=http://<kickstart_ip>:8000/<serial>/` for cloud-init.
+- NFS exports use `10.0.60.0/24` subnet restriction — managed by Ansible kickstart role in tynet-infra (`group_vars/all.yml`).
 
 ## Overlay filesystem design
 

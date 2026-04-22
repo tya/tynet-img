@@ -9,11 +9,19 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
 ################################################################################
 # functions
 ################################################################################
-##
-# usage
 function usage {
-  echo "Usage: extract-img [URL] [DOWNLOAD_DIR]"
+  echo "Usage: extract-img [nfs_release]"
+  echo "  nfs_release  ubuntu-22.04 | ubuntu-26.04  (default: ubuntu-22.04)"
+  echo ""
+  echo "Downloads and extracts the Ubuntu ARM64 image for the given release"
+  echo "to /exports/netboot/<nfs_release>/."
 }
+
+# Image URLs keyed by release name
+declare -A IMAGE_URLS=(
+  [ubuntu-22.04]="https://cdimage.ubuntu.com/releases/22.04/release/ubuntu-22.04.5-preinstalled-server-arm64+raspi.img.xz"
+  [ubuntu-26.04]="https://cdimage.ubuntu.com/releases/26.04/snapshot-4/ubuntu-26.04-snapshot4-preinstalled-server-arm64+raspi.img.xz"
+)
 
 # download-img
 function download-img {
@@ -91,12 +99,15 @@ function install {
 ##
 # extract-img
 function extract-img {
-  url=${1:-"https://cdimage.ubuntu.com/releases/26.04/snapshot-4/ubuntu-26.04-snapshot4-preinstalled-server-arm64+raspi.img.xz"}
-  dst=${2:-"/exports/netboot/$(basename "${url}" .img.xz | cut -f1,2 -d '-')"}
+  local nfs_release=${1:-ubuntu-22.04}
+  local url=${IMAGE_URLS[$nfs_release]:-}
+  local dst="/exports/netboot/${nfs_release}"
+
+  [[ -n "${url}" ]] \
+    || { log "extract-img: unknown release '${nfs_release}'; add it to IMAGE_URLS in extract-img"; exit 1; }
 
   if [[ -d "${dst}/usr" ]]; then
     log "extract-img: ${dst} already populated, skipping extract"
-    echo "${dst}"
     return
   fi
 
@@ -111,10 +122,13 @@ function extract-img {
   log "extract-img: rsyncing boot partition"
   install "${boot_mnt}" "${dst}/boot"
   log "extract-img: done"
-  echo "${dst}"
 }
 
 ################################################################################
 # entrypoint
 ################################################################################
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage; exit 0
+fi
+
 extract-img "$@"

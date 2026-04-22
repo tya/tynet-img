@@ -22,22 +22,22 @@ step_done() {
 ################################################################################
 # functions
 ################################################################################
-##
-# usage
 function usage {
-  echo "Usage: customize-img [kickstart_ip] [serial] [hostname] [overlay_dev]"
-  echo "  overlay_dev  optional SSD partition for overlay upper layer, e.g. /dev/sda1"
+  echo "Usage: customize-img [nfs_release]"
+  echo "  nfs_release  name of the release directory under /exports/netboot/"
+  echo "               (default: ubuntu-22.04)"
+  echo ""
+  echo "Customizes the shared base image for NFS netboot. Node-specific config"
+  echo "(cmdline.txt, TFTP dirs) is handled separately by build-node."
 }
 
 ##
-# customize_root
+# customize_root — modify the root filesystem for NFS netboot
 function customize_root {
   local root_dir=${1}
-  local ip=${2}
 
   # fstab - no root entry: overlayfs is set up by initramfs and systemd must
   # not remount / from fstab (that would override the overlay with ro NFS).
-  # Leave fstab empty so systemd leaves the overlay root as-is (rw).
   echo "" > "${root_dir}/etc/fstab"
 
   # disable resizefs
@@ -70,14 +70,10 @@ CLOUDINIT
 }
 
 ##
-# customize_boot
-function customize_boot {
+# prepare_boot — flatten os_prefix layout and download Pi 4 firmware.
+# Node-specific config (cmdline.txt) is written by build-node, not here.
+function prepare_boot {
   local boot_dir=${1}
-  local ip=${2}
-  local serial=${3}
-  local hostname=${4}
-  local root_dir=${5}
-  local overlay_dev=${6:-}
 
   # Newer raspi images use os_prefix=current/ for A/B updates, but TFTP netboot
   # needs files at the boot partition root. Flatten current/ into root and remove
@@ -86,15 +82,6 @@ function customize_boot {
     rsync -a "${boot_dir}/current/" "${boot_dir}/"
     sed -i '/^os_prefix=/d' "${boot_dir}/config.txt"
   fi
-
-  # cmdline.txt - ro NFS root + overlay_host for per-node overlayfs.
-  # Append overlay_dev= when an SSD upper layer device is specified.
-  local kickstart_mac
-  kickstart_mac=$(ip link show | awk '/link\/ether/{print $2}' | head -1 | tr -d ':')
-  local overlay_dev_param=""
-  [[ -n "${overlay_dev}" ]] && overlay_dev_param=" overlay_dev=${overlay_dev}"
-  local cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${ip}:${root_dir},vers=3 ro ip=dhcp rootwait swiotlb=noforce overlay_host=${hostname}${overlay_dev_param} netconsole=6665@/eth0,6666@${ip}/${kickstart_mac} ds=nocloud;s=http://${ip}:8000/${serial}/"
-  echo "${cmdline}" > "${boot_dir}/cmdline.txt"
 
   # Pi 4 netboot firmware — Ubuntu images don't ship start4.elf/fixup4.dat
   # at the TFTP-accessible boot partition root (they assume EEPROM-based SD boot).
@@ -206,45 +193,39 @@ function rebuild_initramfs {
 }
 
 ##
-# customize image for netboot
+# main
 function customize-img {
-  local kickstart_ip=${1:?"kickstart_ip required"}
-  local serial=${2:?"serial required"}
-  local hostname=${3:-${serial}}
-  local overlay_dev=${4:-}
+  local nfs_release=${1:-ubuntu-22.04}
+  local root_dir="/exports/netboot/${nfs_release}"
 
-  # Set up log file and tee all stderr to it for the duration of this run.
   local logfile
-  logfile="${LOG_DIR}/customize-img-$(date +%Y%m%d-%H%M%S)-${hostname}.log"
+  logfile="${LOG_DIR}/customize-img-$(date +%Y%m%d-%H%M%S)-${nfs_release}.log"
   ln -sf "${logfile}" "${LOG_DIR}/latest.log"
   exec > >(tee -a "${logfile}") 2> >(tee -a "${logfile}" >&2)
 
   log "========================================"
   log "customize-img start"
-  log "  hostname:     ${hostname}"
-  log "  serial:       ${serial}"
-  log "  kickstart_ip: ${kickstart_ip}"
-  log "  overlay_dev:  ${overlay_dev:-"(none — tmpfs+NFS fallback)"}"
-  log "  log:          ${logfile}"
+  log "  nfs_release: ${nfs_release}"
+  log "  root_dir:    ${root_dir}"
+  log "  log:         ${logfile}"
   log "========================================"
 
   trap 'log "FAILED (exit $?) after $((SECONDS))s — see ${logfile}"' ERR
 
-  local root_dir
   step "extract-img"
-  root_dir=$(./extract-img)
-  [[ -n "${root_dir}" && -d "${root_dir}/usr" ]] \
-    || { log "extract-img returned invalid root: '${root_dir}'"; exit 1; }
+  ./extract-img "${nfs_release}"
+  [[ -d "${root_dir}/usr" ]] \
+    || { log "extract-img produced invalid root at ${root_dir}"; exit 1; }
   log "    root: ${root_dir} (${SECONDS}s elapsed)"
 
-  local boot_dir=${root_dir}/boot
+  local boot_dir="${root_dir}/boot"
 
   step "customize_root"
-  customize_root "${root_dir}" "${kickstart_ip}"
+  customize_root "${root_dir}"
   log "    done (${SECONDS}s elapsed)"
 
-  step "customize_boot"
-  customize_boot "${boot_dir}" "${kickstart_ip}" "${serial}" "${hostname}" "${root_dir}" "${overlay_dev}"
+  step "prepare_boot"
+  prepare_boot "${boot_dir}"
   log "    done (${SECONDS}s elapsed)"
 
   step "install_overlay_hook"
@@ -260,13 +241,15 @@ function customize-img {
   log "    done (${SECONDS}s elapsed)"
 
   log "========================================"
-  log "customize-img SUCCESS — ${hostname} (${SECONDS}s total)"
+  log "customize-img SUCCESS — ${nfs_release} (${SECONDS}s total)"
   log "========================================"
-
-  echo "${root_dir}"
 }
 
 ################################################################################
 # entrypoint
 ################################################################################
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage; exit 0
+fi
+
 customize-img "$@"

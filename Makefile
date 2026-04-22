@@ -1,12 +1,12 @@
-BINARY        = serve-cloud-init
-CMD_DIR       = serve-cloud-init
-BASE_IMG      = /exports/netboot/ubuntu-22.04
-OVERLAY_DIR   = /exports/overlay
-KICKSTART_IP  = 10.0.60.100
+BINARY      = serve-cloud-init
+CMD_DIR     = serve-cloud-init
+OVERLAY_DIR = /exports/overlay
 
-.PHONY: help build build-linux test clean kickstart provision \
+.PHONY: help build build-linux test clean \
+        ubuntu-22.04 ubuntu-26.04 \
+        pi2 pi3 pi \
         update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% reboot-nodes \
-        pi1 pi2 pi3 pi logs status console cycle-pi2 cycle-pi3
+        logs status console cycle-pi2 cycle-pi3
 
 .DEFAULT_GOAL := help
 
@@ -19,27 +19,26 @@ help:
 	@echo "  test                   run Go unit tests"
 	@echo "  clean                  remove built binary"
 	@echo ""
-	@echo "Provisioning:"
-	@echo "  kickstart              run Ansible from Mac against kickstart host"
-	@echo "  provision              run Ansible from kickstart itself (no SSH needed)"
+	@echo "Image build (run on kickstart — one per release, node-agnostic):"
+	@echo "  ubuntu-22.04           extract + customize shared base image for ubuntu-22.04"
+	@echo "  ubuntu-26.04           extract + customize shared base image for ubuntu-26.04"
 	@echo ""
-	@echo "Image build (run on kickstart host):"
-	@echo "  pi1                    build netboot image for pi1.tynet.us"
-	@echo "  pi2                    build netboot image for pi2.tynet.us"
-	@echo "  pi3                    build netboot image for pi3.tynet.us"
-	@echo "  pi                     build netboot images for all nodes"
+	@echo "Node provisioning (run on kickstart — per node):"
+	@echo "  pi2                    provision pi2.tynet.us TFTP dir and overlay dirs"
+	@echo "  pi3                    provision pi3.tynet.us TFTP dir and overlay dirs"
+	@echo "  pi                     provision all nodes"
 	@echo ""
-	@echo "Maintenance (run on kickstart host):"
+	@echo "Maintenance (run on kickstart):"
 	@echo "  update-base            apply security patches to the shared base image"
 	@echo "  wipe-overlay-<node>    wipe a single node's overlay (e.g. make wipe-overlay-pi2)"
 	@echo "  wipe-all-overlays      wipe all nodes' overlays (requires CONFIRM=yes)"
 	@echo "  wipe-release-<name>    wipe a netboot release dir (e.g. make wipe-release-ubuntu-22.04)"
-	@echo "  wipe-tftp              wipe all per-node TFTP dirs (re-run provision to repopulate)"
-	@echo "  wipe-tftp-<serial>     wipe a single node's TFTP dir (e.g. make wipe-tftp-244634d3)"
-	@echo "  reboot-nodes           drain and reboot all nodes via Ansible"
-	@echo "  cycle-pi2              power-cycle pi2 via Unifi PoE"
-	@echo "  cycle-pi3              power-cycle pi3 via Unifi PoE"
-	@echo "  status                 show per-node status (release, overlay, last sync)"
+	@echo "  wipe-tftp              wipe all per-node TFTP dirs (re-run pi to repopulate)"
+	@echo "  wipe-tftp-<mac>        wipe a single node's TFTP dir (e.g. make wipe-tftp-dc-a6-32-8d-f3-ca)"
+	@echo "  reboot-nodes           drain and reboot all nodes (via tynet-infra)"
+	@echo "  cycle-pi2              power-cycle pi2 via Unifi PoE (via tynet-infra)"
+	@echo "  cycle-pi3              power-cycle pi3 via Unifi PoE (via tynet-infra)"
+	@echo "  status                 show per-node status (release, overlay, SSH key, last sync)"
 	@echo "  console                listen for netconsole messages from booting nodes"
 	@echo "  logs                   show recent build log files"
 
@@ -55,32 +54,30 @@ test:
 clean:
 	rm -f $(BINARY)
 
-pi1:
-	sudo ./customize-img $(KICKSTART_IP) ad36c642 pi1.tynet.us
+ubuntu-22.04:
+	sudo ./customize-img ubuntu-22.04
+
+ubuntu-26.04:
+	sudo ./customize-img ubuntu-26.04
 
 pi2:
-	sudo ./customize-img $(KICKSTART_IP) 244634d3 pi2.tynet.us
+	sudo ./build-node pi2.tynet.us
 
 pi3:
-	sudo ./customize-img $(KICKSTART_IP) a43386be pi3.tynet.us
+	sudo ./build-node pi3.tynet.us
 
-pi: pi1 pi2 pi3
-
-kickstart:
-	cd ansible && ansible-playbook playbooks/kickstart.yml
-
-# Run from kickstart itself (uses local connection, no SSH needed)
-provision:
-	cd ansible && ansible-playbook -i inventory-local.ini playbooks/kickstart.yml
+pi: pi2 pi3
 
 
 # Update the shared base image with security patches.
 # Run wipe-all-overlays + reboot nodes afterward so no upper-layer shadows linger.
 # Uses systemd-nspawn which handles /proc /dev /sys bind-mounts automatically.
+# Specify RELEASE to target a different base image (default: ubuntu-22.04).
+RELEASE ?= ubuntu-22.04
 update-base:
-	sudo systemd-nspawn -D $(BASE_IMG) apt-get update
-	sudo systemd-nspawn -D $(BASE_IMG) apt-get upgrade -y
-	sudo systemd-nspawn -D $(BASE_IMG) apt-get autoremove -y
+	sudo systemd-nspawn -D /exports/netboot/$(RELEASE) apt-get update
+	sudo systemd-nspawn -D /exports/netboot/$(RELEASE) apt-get upgrade -y
+	sudo systemd-nspawn -D /exports/netboot/$(RELEASE) apt-get autoremove -y
 
 # Wipe a netboot release directory: make wipe-release-ubuntu-22.04
 # Removes /exports/netboot/<name>. Does NOT touch TFTP dirs or NFS exports —
@@ -121,28 +118,16 @@ wipe-all-overlays:
 		sudo mkdir -p "$$d/upper" "$$d/work"; \
 	done
 
-# Reboot all nodes via Ansible.
-# Drains each node before rebooting so k8s workloads are evicted gracefully,
-# then uncordons after the node comes back up.
+# Reboot all nodes via tynet-infra (k8s drain + reboot + uncordon)
 reboot-nodes:
-	cd ansible && ansible-playbook playbooks/reboot-nodes.yml
+	$(MAKE) -C ../../tynet-infra reboot-nodes
 
-UNIFI_SWITCH_MAC = 18:e8:29:23:bf:22
-UNIFI_API       = https://unifi.tynet.us/proxy/network/api/s/default/cmd/devmgr
-
+# Power-cycle targets delegate to tynet-infra (Unifi PoE + 1Password, not netboot-specific)
 cycle-pi2:
-	$(eval UNIFI_KEY := $(shell op read "op://Private/radius-user-importer/password"))
-	curl -sk -X POST "$(UNIFI_API)" \
-	  -H "X-API-KEY: $(UNIFI_KEY)" \
-	  -H "Content-Type: application/json" \
-	  -d '{"cmd":"power-cycle","mac":"$(UNIFI_SWITCH_MAC)","port_idx":6}' | jq .meta
+	$(MAKE) -C ../../tynet-infra cycle-pi2
 
 cycle-pi3:
-	$(eval UNIFI_KEY := $(shell op read "op://Private/radius-user-importer/password"))
-	curl -sk -X POST "$(UNIFI_API)" \
-	  -H "X-API-KEY: $(UNIFI_KEY)" \
-	  -H "Content-Type: application/json" \
-	  -d '{"cmd":"power-cycle","mac":"$(UNIFI_SWITCH_MAC)","port_idx":7}' | jq .meta
+	$(MAKE) -C ../../tynet-infra cycle-pi3
 
 status:
 	./check-status
