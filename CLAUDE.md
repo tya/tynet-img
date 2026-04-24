@@ -10,7 +10,7 @@ The flow is:
 
 1. `extract-img <nfs_release>` — downloads an Ubuntu ARM64 preinstalled image, extracts it to `/exports/netboot/<nfs_release>/`
 2. `customize-img <nfs_release>` — calls `extract-img`, then modifies the shared base image for NFS netboot: fstab, netplan, cloud-init network config, overlayroot-nfs initramfs hook, initramfs rebuild. **Node-agnostic** — no per-node params.
-3. `build-node <hostname>` — provisions a single node's TFTP directory: syncs boot files from the base image, writes `cmdline.txt`, creates overlay dirs. Reads config from `nodes.conf`.
+3. `build-node <hostname>` — provisions a single node's TFTP directory: syncs boot files from the base image, writes `cmdline.txt`, creates overlay dirs. Reads config from `tynet.env`.
 
 ## Repository layout
 
@@ -18,15 +18,13 @@ The flow is:
 customize-img          # customize shared base image for NFS netboot (node-agnostic)
 extract-img            # download + extract Ubuntu ARM64 image
 build-node             # provision per-node TFTP dir + overlay dirs
-nodes.conf             # node inventory (MACs, serials, IPs, releases) — bash-sourceable
+tynet.env             # node inventory (MACs, serials, IPs, releases) — bash-sourceable
 hooks/
   overlayroot-nfs      # initramfs hook — sets up overlayfs on boot
   overlayroot-nfs-sync # systemd shutdown service — syncs tmpfs upper to NFS state store
 serve-cloud-init/
   main.go              # HTTP server for per-node cloud-init seed data
   cloud-init/          # per-node seed files (meta-data + user-data), keyed by serial
-setup/
-  kickstart/           # cloud-init seed files for flashing kickstart SD card
 vms/                   # Lima VM test environment (kickstart + node) — TEST ONLY
 tmp/                   # gitignored local runtime artifacts (cache, exports)
 ```
@@ -75,7 +73,7 @@ make pi               # provision all nodes
 - `extract-img` caches the downloaded `.img` in `/var/cache/img/` and skips re-download if already present. rsync exit code 23 (partial transfer due to special files) is treated as success.
 - `customize-img` validates that `root_dir` (`/exports/netboot/<release>/`) contains `usr/` before modifying — prevents host corruption if extraction fails.
 - `customize-img` is **node-agnostic**: it customizes the shared base image only. No `serial`, `hostname`, or `overlay_dev` params.
-- `build-node` reads all per-node config from `nodes.conf` (sourced as bash). To add a node: add a `NODE_<SHORTNAME>_*` block to `nodes.conf` and re-run `make kickstart` in tynet-infra to update `/etc/exports`.
+- `build-node` reads all per-node config from `tynet.env` (sourced as bash). To add a node: add a `NODE_<SHORTNAME>_*` block to `tynet.env` and re-run `make kickstart` in tynet-infra to update `/etc/exports`.
 - TFTP dirs are keyed by MAC address (`/srv/tftpboot/<mac>/`) matching Pi EEPROM `TFTP_PREFIX=2` behaviour.
 - `cmdline.txt` uses `ds=nocloud;s=http://<kickstart_ip>:8000/<serial>/` for cloud-init.
 - NFS exports use `10.0.60.0/24` subnet restriction — managed by Ansible kickstart role in tynet-infra (`group_vars/all.yml`).

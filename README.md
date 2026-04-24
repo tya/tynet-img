@@ -64,7 +64,7 @@ make ubuntu-26.04
 
 ### `build-node <hostname>`
 
-Provisions a single node's TFTP directory and overlay dirs. Reads all config from `nodes.conf`.
+Provisions a single node's TFTP directory and overlay dirs. Reads all config from `tynet.env`.
 
 - Syncs boot files from `/exports/netboot/<release>/boot/` → `/srv/tftpboot/<mac>/`
 - Writes per-node `/srv/tftpboot/<mac>/cmdline.txt` (NFS root, overlay_host, overlay_dev, netconsole, cloud-init URL)
@@ -80,7 +80,7 @@ make pi3
 make pi   # all nodes
 ```
 
-### `nodes.conf`
+### `tynet.env`
 
 Bash-sourceable node inventory. Used by `build-node` and `check-status`. Edit this to add or reconfigure nodes.
 
@@ -122,7 +122,7 @@ overlayfs (visible root)
   └── lower  →  NFS           (shared read-only base image)
 ```
 
-The upper layer is tmpfs by default (Linux 6.x requires `RENAME_WHITEOUT` support on upper, which NFS lacks). If `overlay_dev=/dev/sda1` is set in `nodes.conf`, the `overlayroot-nfs` hook mounts the SSD as upper instead.
+The upper layer is tmpfs by default (Linux 6.x requires `RENAME_WHITEOUT` support on upper, which NFS lacks). If `overlay_dev=/dev/sda1` is set in `tynet.env`, the `overlayroot-nfs` hook mounts the SSD as upper instead.
 
 ### State persistence (tmpfs mode)
 
@@ -175,7 +175,7 @@ make cycle-pi3           # power-cycle pi3 via Unifi PoE
 ## Provisioning a new node
 
 ```bash
-# 1. Add node block to nodes.conf (serial, MAC, IP, release)
+# 1. Add node block to tynet.env (serial, MAC, IP, release)
 
 # 2. Add cloud-init seed data:
 #    serve-cloud-init/cloud-init/<serial>/meta-data

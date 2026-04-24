@@ -1,9 +1,9 @@
 BINARY      = serve-cloud-init
 CMD_DIR     = serve-cloud-init
 OVERLAY_DIR = /exports/overlay
+ENV_FILE   ?= tynet.env
 
 .PHONY: help build build-linux test clean \
-        ubuntu-22.04 ubuntu-26.04 \
         pi2 pi3 pi \
         update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% reboot-nodes \
         logs status console cycle-pi2 cycle-pi3
@@ -20,13 +20,14 @@ help:
 	@echo "  clean                  remove built binary"
 	@echo ""
 	@echo "Image build (run on kickstart — one per release, node-agnostic):"
-	@echo "  ubuntu-22.04           extract + customize shared base image for ubuntu-22.04"
-	@echo "  ubuntu-26.04           extract + customize shared base image for ubuntu-26.04"
+	@echo "  ubuntu-<ver>           extract + customize shared base image (e.g. make ubuntu-26.04)"
+	@echo "                         To add a new release, add its URL to IMAGE_URLS in extract-img"
 	@echo ""
 	@echo "Node provisioning (run on kickstart — per node):"
 	@echo "  pi2                    provision pi2.tynet.us TFTP dir and overlay dirs"
 	@echo "  pi3                    provision pi3.tynet.us TFTP dir and overlay dirs"
 	@echo "  pi                     provision all nodes"
+	@echo "  ENV_FILE=vm.env make pi2   use alternate env file (default: tynet.env)"
 	@echo ""
 	@echo "Maintenance (run on kickstart):"
 	@echo "  update-base            apply security patches to the shared base image"
@@ -54,17 +55,16 @@ test:
 clean:
 	rm -f $(BINARY)
 
-ubuntu-22.04:
-	sudo ./customize-img ubuntu-22.04
-
-ubuntu-26.04:
-	sudo ./customize-img ubuntu-26.04
+# Pattern rule: works for any release (e.g. make ubuntu-28.04).
+# Add the new release's image URL to IMAGE_URLS in extract-img first.
+ubuntu-%:
+	sudo ./extract-img ubuntu-$* && sudo ./customize-img ubuntu-$*
 
 pi2:
-	sudo ./build-node pi2.tynet.us
+	TYNET_ENV=$(ENV_FILE) sudo ./build-node pi2.tynet.us
 
 pi3:
-	sudo ./build-node pi3.tynet.us
+	TYNET_ENV=$(ENV_FILE) sudo ./build-node pi3.tynet.us
 
 pi: pi2 pi3
 
@@ -130,7 +130,7 @@ cycle-pi3:
 	$(MAKE) -C ../../tynet-infra cycle-pi3
 
 status:
-	./check-status
+	TYNET_ENV=$(ENV_FILE) ./check-status
 
 # Listen for netconsole UDP messages from booting nodes.
 # Nodes send kernel log (including overlayroot-nfs hook output) to kickstart:6666.

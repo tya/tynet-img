@@ -7,9 +7,10 @@ set -euo pipefail
 SCRIPT_DIR=$(dirname "$0")
 OVERLAY_DIR=/exports/overlay
 
-# Load node inventory from nodes.conf
+# Load node inventory
+env_file="${TYNET_ENV:-${SCRIPT_DIR}/tynet.env}"
 # shellcheck source=/dev/null
-source "${SCRIPT_DIR}/nodes.conf"
+source "${env_file}"
 
 # Build fully-qualified hostname list from NODES short names
 HOSTNAMES=()
@@ -17,7 +18,7 @@ for short in "${NODES[@]}"; do
   key=${short^^}
   ip_var="NODE_${key}_IP"
   # Use hostname if resolvable, fall back to short name with domain
-  HOSTNAMES+=("${short}.tynet.us")
+  HOSTNAMES+=("${short}.${DOMAIN:-tynet.us}")
 done
 
 # 1Password public key fingerprint — expected SSH host key for all nodes

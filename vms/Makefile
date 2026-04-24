@@ -17,9 +17,7 @@ start:
 	limactl start node.yaml
 
 provision:
-	@echo "TODO: VM provisioning needs an inventory-vm.ini in tynet-infra (kickstart Ansible moved there)"
-	@echo "For now, SSH into the kickstart VM and provision manually."
-	@exit 1
+	$(MAKE) -C ../../tynet-infra kickstart-vm
 
 test:
 	limactl shell node -- sudo bash -s < test.sh

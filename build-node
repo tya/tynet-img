@@ -27,10 +27,10 @@ fi
 hostname=${1:?"hostname required — Usage: build-node <hostname>"}
 
 # Source node inventory
-conf="${SCRIPT_DIR}/nodes.conf"
-[[ -f "${conf}" ]] || { log "ERROR: nodes.conf not found at ${conf}"; exit 1; }
+env_file="${TYNET_ENV:-${SCRIPT_DIR}/tynet.env}"
+[[ -f "${env_file}" ]] || { log "ERROR: env file not found at ${env_file}"; exit 1; }
 # shellcheck source=/dev/null
-source "${conf}"
+source "${env_file}"
 
 # Resolve short name: strip domain if given (pi2.tynet.us → pi2)
 short=${hostname%%.*}
@@ -49,10 +49,10 @@ node_ip=${!ip_var:-}
 nfs_release=${!release_var:-}
 overlay_dev=${!overlay_dev_var:-}
 
-[[ -n "${serial}"      ]] || { log "ERROR: ${serial_var} not set in nodes.conf"; exit 1; }
-[[ -n "${mac}"         ]] || { log "ERROR: ${mac_var} not set in nodes.conf"; exit 1; }
-[[ -n "${node_ip}"     ]] || { log "ERROR: ${ip_var} not set in nodes.conf"; exit 1; }
-[[ -n "${nfs_release}" ]] || { log "ERROR: ${release_var} not set in nodes.conf"; exit 1; }
+[[ -n "${serial}"      ]] || { log "ERROR: ${serial_var} not set in ${env_file}"; exit 1; }
+[[ -n "${mac}"         ]] || { log "ERROR: ${mac_var} not set in ${env_file}"; exit 1; }
+[[ -n "${node_ip}"     ]] || { log "ERROR: ${ip_var} not set in ${env_file}"; exit 1; }
+[[ -n "${nfs_release}" ]] || { log "ERROR: ${release_var} not set in ${env_file}"; exit 1; }
 
 root_dir="/exports/netboot/${nfs_release}"
 tftp_dir="/srv/tftpboot/${mac}"
