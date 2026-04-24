@@ -20,7 +20,7 @@ function usage {
 # Image URLs keyed by release name
 declare -A IMAGE_URLS=(
   [ubuntu-22.04]="https://cdimage.ubuntu.com/releases/22.04/release/ubuntu-22.04.5-preinstalled-server-arm64+raspi.img.xz"
-  [ubuntu-26.04]="https://cdimage.ubuntu.com/releases/26.04/snapshot-4/ubuntu-26.04-snapshot4-preinstalled-server-arm64+raspi.img.xz"
+  [ubuntu-26.04]="https://cdimage.ubuntu.com/releases/26.04/release/ubuntu-26.04-preinstalled-server-arm64+raspi.img.xz"
 )
 
 # download-img
