@@ -104,7 +104,7 @@ wipe-tftp-%:
 	sudo rm -rf /srv/tftpboot/$*
 	sudo mkdir -p /srv/tftpboot/$*
 
-# Wipe one node's overlay: make wipe-overlay-pi1
+# Wipe one node's overlay: make wipe-overlay-pi2
 # The node must be offline or rebooted after this.
 wipe-overlay-%:
 	@echo "Wiping overlay for $*"
