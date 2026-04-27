@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# check-boot-config — validate per-node TFTP + NFS config before rebooting
+# Run on kickstart. Exits 0 if all checks pass, 1 if any fail.
+#
+# Usage: ./check-boot-config [--env <path>]
+
+set -euo pipefail
+
+SCRIPT_DIR=$(dirname "$0")
+env_file="${TYNET_ENV:-${SCRIPT_DIR}/tynet.env}"
+# shellcheck source=/dev/null
+source "${env_file}"
+
+PASS=0
+FAIL=1
+errors=0
+
+ok()   { printf "  \e[32m✓\e[0m %s\n" "$*"; }
+fail() { printf "  \e[31m✗\e[0m %s\n" "$*"; (( errors++ )) || true; }
+info() { printf "  \e[33m·\e[0m %s\n" "$*"; }
+section() { echo; printf "\e[1m%s\e[0m\n" "$1"; }
+
+check_file_readable() {
+  local path="$1" label="$2"
+  if [[ ! -f "${path}" ]]; then
+    fail "${label}: not found (${path})"
+    return
+  fi
+  # Check world-readable (other read bit)
+  local perms
+  perms=$(stat -c '%a' "${path}")
+  if [[ $(( 8#${perms} & 8#004 )) -ne 0 ]]; then
+    ok "${label}: exists and world-readable (${perms})"
+  else
+    fail "${label}: exists but NOT world-readable — TFTP server can't serve it (${perms})"
+  fi
+}
+
+check_cmdline_field() {
+  local cmdline_path="$1" field="$2" expected="$3"
+  local actual
+  actual=$(grep -o "${field}[^ ]*" "${cmdline_path}" 2>/dev/null | head -1 || true)
+  if [[ "${actual}" == "${field}${expected}" ]]; then
+    ok "cmdline ${field}: ${expected}"
+  else
+    fail "cmdline ${field}: expected '${expected}', got '${actual:-<missing>}'"
+  fi
+}
+
+# ─── per-node checks ──────────────────────────────────────────────────────────
+
+for short in "${NODES[@]}"; do
+  KEY=$(tr '[:lower:]' '[:upper:]' <<< "${short}")
+  node="${short}.${DOMAIN:-tynet.us}"
+  ip_var="NODE_${KEY}_IP"
+  release_var="NODE_${KEY}_RELEASE"
+  overlay_dev_var="NODE_${KEY}_OVERLAY_DEV"
+  serial_var="NODE_${KEY}_SERIAL"
+  mac_var="NODE_${KEY}_MAC"
+
+  release="${!release_var:-}"
+  overlay_dev="${!overlay_dev_var:-}"
+  serial="${!serial_var:-}"
+  mac="${!mac_var:-}"
+
+  section "=== ${node} ==="
+
+  # ── Find active TFTP dir ──────────────────────────────────────────────────
+  cmdline_path=$(grep -rl "overlay_host=${node}" /srv/tftpboot/ 2>/dev/null | head -1 || true)
+  if [[ -z "${cmdline_path}" ]]; then
+    fail "No cmdline.txt found with overlay_host=${node} in /srv/tftpboot/"
+    echo "  Checked: $(ls /srv/tftpboot/ 2>/dev/null | tr '\n' ' ')"
+    continue
+  fi
+  tftp_dir=$(dirname "${cmdline_path}")
+  tftp_id=$(basename "${tftp_dir}")
+  ok "Active TFTP dir: /srv/tftpboot/${tftp_id}/"
+
+  # Warn if using expected prefix type
+  if [[ "${tftp_id}" == "${mac}" ]]; then
+    info "Boot prefix: MAC-based (TFTP_PREFIX=2)"
+  elif [[ "${tftp_id}" == "${serial}" ]]; then
+    info "Boot prefix: serial-based (default)"
+  else
+    info "Boot prefix: unknown id '${tftp_id}' (expected mac=${mac} or serial=${serial})"
+  fi
+
+  # ── TFTP boot file permissions ────────────────────────────────────────────
+  check_file_readable "${tftp_dir}/vmlinuz"   "vmlinuz"
+  check_file_readable "${tftp_dir}/initrd.img" "initrd.img"
+  check_file_readable "${tftp_dir}/config.txt" "config.txt"
+
+  # ── cmdline.txt content ───────────────────────────────────────────────────
+  if [[ ! -f "${cmdline_path}" ]]; then
+    fail "cmdline.txt: not found at ${cmdline_path}"
+  else
+    ok "cmdline.txt: found"
+
+    # Release matches inventory
+    cmdline_release=$(grep -o 'nfsroot=[^ ]*' "${cmdline_path}" | sed 's|.*netboot/||;s|,.*||' || true)
+    if [[ "${cmdline_release}" == "${release}" ]]; then
+      ok "cmdline nfsroot release: ${release}"
+    else
+      fail "cmdline nfsroot release: expected '${release}', got '${cmdline_release:-<missing>}'"
+    fi
+
+    # overlay_host matches node FQDN
+    check_cmdline_field "${cmdline_path}" "overlay_host=" "${node}"
+
+    # overlay_dev: present iff OVERLAY_DEV is set in inventory
+    if grep -q 'overlay_dev=' "${cmdline_path}" 2>/dev/null; then
+      if [[ -n "${overlay_dev}" ]]; then
+        ok "cmdline overlay_dev: set (matches inventory)"
+      else
+        fail "cmdline overlay_dev: present in cmdline but NOT in inventory — remove it"
+      fi
+    else
+      if [[ -n "${overlay_dev}" ]]; then
+        fail "cmdline overlay_dev: in inventory (${overlay_dev}) but missing from cmdline"
+      else
+        ok "cmdline overlay_dev: absent (correct — tmpfs mode)"
+      fi
+    fi
+
+    # ip=dhcp present
+    if grep -q 'ip=dhcp' "${cmdline_path}"; then
+      ok "cmdline ip=dhcp: present"
+    else
+      fail "cmdline ip=dhcp: missing"
+    fi
+  fi
+
+  # ── NFS root exists ───────────────────────────────────────────────────────
+  nfs_root="/exports/netboot/${release}"
+  if [[ -d "${nfs_root}" ]]; then
+    ok "NFS root: ${nfs_root} exists"
+  else
+    fail "NFS root: ${nfs_root} does not exist"
+  fi
+
+  # ── NFS export active ─────────────────────────────────────────────────────
+  if sudo exportfs -v 2>/dev/null | grep -q "${nfs_root}"; then
+    ok "NFS export: ${nfs_root} is exported"
+  else
+    fail "NFS export: ${nfs_root} not in active exports"
+  fi
+
+  # ── Overlay dirs on kickstart ─────────────────────────────────────────────
+  overlay_dir="/exports/overlay/${node}"
+  for sub in upper work; do
+    if [[ -d "${overlay_dir}/${sub}" ]]; then
+      ok "Overlay ${sub}: ${overlay_dir}/${sub} exists"
+    else
+      fail "Overlay ${sub}: ${overlay_dir}/${sub} missing — run: sudo mkdir -p ${overlay_dir}/${sub}"
+    fi
+  done
+
+  # ── Cloud-init seed dir ───────────────────────────────────────────────────
+  ds_url=$(grep -o 'ds=nocloud[^ ]*' "${cmdline_path}" 2>/dev/null | head -1 || true)
+  if [[ -n "${ds_url}" ]]; then
+    seed_path=$(echo "${ds_url}" | grep -o 's=http://[^/]*/[0-9]*/[^/;]*' | sed 's|s=http://[^/]*/||' || true)
+    seed_dir="/srv/tftpboot/${seed_path%/}"
+    if [[ -d "${seed_dir}" ]]; then
+      if ls "${seed_dir}/user-data" "${seed_dir}/meta-data" &>/dev/null; then
+        ok "Cloud-init seed: ${seed_dir} has user-data + meta-data"
+      else
+        info "Cloud-init seed: ${seed_dir} exists but missing user-data or meta-data"
+      fi
+    else
+      info "Cloud-init seed: ${seed_dir} not found (may be served separately)"
+    fi
+  else
+    info "Cloud-init: no ds=nocloud parameter in cmdline"
+  fi
+done
+
+# ─── summary ─────────────────────────────────────────────────────────────────
+echo
+if [[ "${errors}" -eq 0 ]]; then
+  printf "\e[32mAll checks passed — safe to reboot.\e[0m\n"
+  exit 0
+else
+  printf "\e[31m%d check(s) failed — fix before rebooting.\e[0m\n" "${errors}"
+  exit 1
+fi

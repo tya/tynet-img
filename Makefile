@@ -6,7 +6,7 @@ ENV_FILE   ?= tynet.env
 .PHONY: help build build-linux test clean \
         pi2 pi3 pi \
         update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% reboot-nodes \
-        logs status console cycle-pi2 cycle-pi3
+        logs status check-boot-config console cycle-pi2 cycle-pi3
 
 .DEFAULT_GOAL := help
 
@@ -41,6 +41,7 @@ help:
 	@echo "  reboot-nodes           drain and reboot all nodes (via tynet-infra)"
 	@echo "  cycle-pi2              power-cycle pi2 via Unifi PoE (via tynet-infra)"
 	@echo "  cycle-pi3              power-cycle pi3 via Unifi PoE (via tynet-infra)"
+	@echo "  check-boot-config      validate TFTP + NFS config before rebooting (permissions, cmdline, exports)"
 	@echo "  status                 show per-node status (release, overlay, SSH key, last sync)"
 	@echo "  console                listen for netconsole messages from booting nodes"
 	@echo "  logs                   show recent build log files"
@@ -130,6 +131,9 @@ cycle-pi2:
 
 cycle-pi3:
 	$(MAKE) -C ../../tynet-infra cycle-pi3
+
+check-boot-config:
+	TYNET_ENV=$(ENV_FILE) ./check-boot-config
 
 status:
 	TYNET_ENV=$(ENV_FILE) ./check-status

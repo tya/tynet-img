@@ -15,7 +15,7 @@ source "${env_file}"
 # Build fully-qualified hostname list from NODES short names
 HOSTNAMES=()
 for short in "${NODES[@]}"; do
-  key=${short^^}
+  key=$(tr '[:lower:]' '[:upper:]' <<< "${short}")
   ip_var="NODE_${key}_IP"
   # Use hostname if resolvable, fall back to short name with domain
   HOSTNAMES+=("${short}.${DOMAIN:-tynet.us}")

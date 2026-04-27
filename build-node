@@ -34,7 +34,7 @@ source "${env_file}"
 
 # Resolve short name: strip domain if given (pi2.tynet.us → pi2)
 short=${hostname%%.*}
-key=${short^^}  # uppercase for variable lookup: pi2 → PI2
+key=$(tr '[:lower:]' '[:upper:]' <<< "${short}")  # uppercase for variable lookup: pi2 → PI2
 
 # Look up node config
 serial_var="NODE_${key}_SERIAL"
