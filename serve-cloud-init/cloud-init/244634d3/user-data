@@ -1,7 +1,5 @@
 #cloud-config
-# pi2.tynet.us — bootstrap node
-# Enables cluster addons. After boot, run 'microk8s add-node' here to generate
-# join tokens for the other three nodes.
+# pi2.tynet.us — worker node
 
 users:
   - name: ty
@@ -10,11 +8,5 @@ users:
     shell: /bin/bash
     lock_passwd: true
     ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEA9fmxTmPKwxfGw4WJtnJhGI+S1LxTe41sR3rKnZ1LC ty.alexander@gmail.com
-
-runcmd:
-  - snap install microk8s --classic --channel=1.32/stable
-  - usermod -aG microk8s ty
-  - microk8s status --wait-ready --timeout 300
-  - microk8s enable dns hostpath-storage ingress dashboard
-  - microk8s enable metallb:10.0.60.1-10.0.60.254

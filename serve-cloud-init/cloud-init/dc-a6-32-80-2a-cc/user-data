@@ -1,5 +1,5 @@
 #cloud-config
-# pi3.tynet.us — HA control plane node
+# pi3.tynet.us — worker node
 
 users:
   - name: ty
