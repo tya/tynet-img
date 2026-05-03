@@ -91,6 +91,17 @@ echo "${cmdline}" > "${tftp_dir}/cmdline.txt"
 log "--- create overlay dirs"
 mkdir -p "${overlay_dir}/upper" "${overlay_dir}/work"
 
+# 5. Discovery symlinks: /srv/tftpboot/<serial> and /srv/tftpboot/<hostname>
+# point at the MAC-keyed real dir. The Pi EEPROM (TFTP_PREFIX=2) only fetches
+# through the MAC prefix, so these are purely for humans browsing /srv/tftpboot.
+log "--- create discovery symlinks"
+for name in "${serial}" "${short}"; do
+  if [[ -n "${name}" && "${name}" != "${mac}" ]]; then
+    ln -sfn "${mac}" "/srv/tftpboot/${name}"
+    log "  /srv/tftpboot/${name} -> ${mac}"
+  fi
+done
+
 log "========================================"
 log "build-node SUCCESS — ${hostname}"
 log "  tftp:    ${tftp_dir}/cmdline.txt"
