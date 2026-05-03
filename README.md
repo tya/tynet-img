@@ -166,10 +166,10 @@ make wipe-all-overlays CONFIRM=yes
 make status              # show per-node status (release, overlay mode, SSH key)
 make console             # listen for netconsole boot messages
 make logs                # show recent customize-img run history
-
-make cycle-pi2           # power-cycle pi2 via Unifi PoE
-make cycle-pi3           # power-cycle pi3 via Unifi PoE
 ```
+
+Power-cycling and k8s-aware reboots live in `../tynet-infra` (`make cycle-pi2`,
+`make cycle-pi3`, `make reboot-nodes`).
 
 ## Provisioning a new node
 

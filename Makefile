@@ -3,8 +3,8 @@ ENV_FILE   ?= tynet.env
 
 .PHONY: help \
         pi2 pi3 pi \
-        update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% reboot-nodes \
-        logs status check-boot-config verify-% console cycle-pi2 cycle-pi3
+        update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% \
+        logs status check-boot-config verify-% console
 
 .DEFAULT_GOAL := help
 
@@ -30,9 +30,6 @@ help:
 	@echo "Node maintenance (run on kickstart):"
 	@echo "  wipe-overlay-<node>    wipe a single node's overlay (e.g. make wipe-overlay-pi2)"
 	@echo "  wipe-all-overlays      wipe all nodes' overlays (requires CONFIRM=yes)"
-	@echo "  reboot-nodes           drain and reboot all nodes (via tynet-infra)"
-	@echo "  cycle-pi2              power-cycle pi2 via Unifi PoE (via tynet-infra)"
-	@echo "  cycle-pi3              power-cycle pi3 via Unifi PoE (via tynet-infra)"
 	@echo "  check-boot-config      validate TFTP + NFS config before rebooting (permissions, cmdline, exports)"
 	@echo "  status                 show per-node status (release, overlay, SSH key, last sync)"
 	@echo "  verify-<node>          verify a node booted through TFTP→NFS→overlay→cloud-init→SSH (CYCLE=yes to power-cycle first)"
@@ -106,17 +103,6 @@ wipe-all-overlays:
 		sudo rm -rf "$$d/upper" "$$d/work"; \
 		sudo mkdir -p "$$d/upper" "$$d/work"; \
 	done
-
-# Reboot all nodes via tynet-infra (k8s drain + reboot + uncordon)
-reboot-nodes:
-	$(MAKE) -C ../../tynet-infra reboot-nodes
-
-# Power-cycle targets delegate to tynet-infra (Unifi PoE + 1Password, not netboot-specific)
-cycle-pi2:
-	$(MAKE) -C ../../tynet-infra cycle-pi2
-
-cycle-pi3:
-	$(MAKE) -C ../../tynet-infra cycle-pi3
 
 check-boot-config:
 	TYNET_ENV=$(ENV_FILE) ./check-boot-config
