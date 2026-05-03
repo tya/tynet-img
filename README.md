@@ -113,13 +113,17 @@ NODE_PI3_OVERLAY_DEV=/dev/sda1   # optional: SSD upper layer
 
 ### `serve-cloud-init`
 
-Go program serving per-node cloud-init seed data over HTTP on port 8000. Managed as a systemd service by the kickstart Ansible role in tynet-infra.
+Go program serving per-node cloud-init seed data over HTTP on port 8000.
+Managed as a systemd service by the kickstart Ansible role in tynet-infra.
 
 ```bash
 ./serve-cloud-init -dir ~/src/tynet-img/serve-cloud-init/cloud-init
 ```
 
-Seed files live in `serve-cloud-init/cloud-init/<serial>/` (`meta-data` + `user-data`).
+Seed files (`meta-data`, `user-data`, `network-config`, `vendor-data`) live in
+`serve-cloud-init/cloud-init/<serial>/` — **rendered by tynet-infra Ansible**
+from inventory plus `keys/*.pub`. The directory is gitignored; canonical
+fixtures used by `go test` are in `serve-cloud-init/testdata/cloud-init/`.
 
 ## Overlay filesystem
 
@@ -188,25 +192,22 @@ make cycle-pi3           # power-cycle pi3 via Unifi PoE
 #    - tynet-infra/inventory/production.ini  (add to [nodes])
 #    - tynet-infra/inventory/host_vars/<host>.yml  (serial, MAC, IP, release, fsid)
 
-# 2. Add cloud-init seed data:
-#    serve-cloud-init/cloud-init/<serial>/meta-data
-#    serve-cloud-init/cloud-init/<serial>/user-data
+# 2. Add DHCP reservation in Unifi (MAC → IP)
 
-# 3. Add DHCP reservation in Unifi (MAC → IP)
-
-# 4. Re-run kickstart Ansible — renders tynet.env from inventory + updates NFS exports:
+# 3. Re-run kickstart Ansible — renders tynet.env + per-node cloud-init seed files,
+#    updates NFS exports:
 cd ../tynet-infra && make kickstart
 
-# 5. Build base image if not already done:
+# 4. Build base image if not already done:
 make ubuntu-22.04    # or ubuntu-26.04
 
-# 6. Provision the node's TFTP dir:
+# 5. Provision the node's TFTP dir:
 make pi2   # or whichever node
 
-# 7. Deploy SSH host key:
+# 6. Deploy SSH host key:
 cd ../tynet-infra && make nodes LIMIT=pi2.tynet.us
 
-# 8. Power on — node netboots and runs cloud-init
+# 7. Power on — node netboots and runs cloud-init
 ```
 
 ## Logging

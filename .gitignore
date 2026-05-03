@@ -7,3 +7,7 @@ tmp/
 # its inventory (group_vars/all.yml + host_vars/*.yml). The committed copy
 # is tynet.env.example for documentation only.
 /tynet.env
+
+# Per-node cloud-init seed files are rendered onto the kickstart host by
+# tynet-infra Ansible. Test fixtures live in serve-cloud-init/testdata/.
+/serve-cloud-init/cloud-init/
