@@ -102,6 +102,34 @@ echo "${cmdline}" > "${tftp_dir}/cmdline.txt"
 log "--- create overlay dirs"
 mkdir -p "${overlay_dir}/upper" "${overlay_dir}/work"
 
+# 5. Render ssh_authorized_keys in user-data from keys/*.pub
+log "--- render ssh_authorized_keys from keys/*.pub"
+keys_dir="${SCRIPT_DIR}/keys"
+user_data="${cloudinit_dir}/${cloudinit_key}/user-data"
+if [[ -f "${user_data}" ]] && compgen -G "${keys_dir}/*.pub" > /dev/null; then
+  tmp=$(mktemp)
+  awk -v keys_dir="${keys_dir}" '
+    /^[[:space:]]+ssh_authorized_keys:[[:space:]]*$/ {
+      print
+      match($0, /^[[:space:]]+/)
+      indent = substr($0, 1, RLENGTH) "  "
+      cmd = "cat " keys_dir "/*.pub"
+      while ((cmd | getline line) > 0) {
+        if (line != "") print indent "- " line
+      }
+      close(cmd)
+      in_keys = 1
+      next
+    }
+    in_keys && /^[[:space:]]+-[[:space:]]/ { next }
+    in_keys { in_keys = 0 }
+    { print }
+  ' "${user_data}" > "${tmp}"
+  mv "${tmp}" "${user_data}"
+else
+  log "WARN: skipping ssh_authorized_keys render (user-data=${user_data}, keys=${keys_dir})"
+fi
+
 log "========================================"
 log "build-node SUCCESS — ${hostname}"
 log "  tftp:    ${tftp_dir}/cmdline.txt"
