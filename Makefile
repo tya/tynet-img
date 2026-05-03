@@ -19,7 +19,7 @@ help:
 	@echo "  pi2                    provision pi2.tynet.us TFTP dir and overlay dirs"
 	@echo "  pi3                    provision pi3.tynet.us TFTP dir and overlay dirs"
 	@echo "  pi                     provision all nodes"
-	@echo "  ENV_FILE=vm.env make pi2   use alternate env file (default: tynet.env)"
+	@echo "  ENV_FILE=<path> make pi2   override the default env file (tynet.env)"
 	@echo ""
 	@echo "Image maintenance (run on kickstart):"
 	@echo "  update-base            apply security patches to the shared base image"
