@@ -6,7 +6,7 @@ ENV_FILE   ?= tynet.env
 .PHONY: help build build-linux test clean \
         pi2 pi3 pi \
         update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% reboot-nodes \
-        logs status check-boot-config console cycle-pi2 cycle-pi3
+        logs status check-boot-config verify-% console cycle-pi2 cycle-pi3
 
 .DEFAULT_GOAL := help
 
@@ -43,6 +43,7 @@ help:
 	@echo "  cycle-pi3              power-cycle pi3 via Unifi PoE (via tynet-infra)"
 	@echo "  check-boot-config      validate TFTP + NFS config before rebooting (permissions, cmdline, exports)"
 	@echo "  status                 show per-node status (release, overlay, SSH key, last sync)"
+	@echo "  verify-<node>          verify a node booted through TFTP→NFS→overlay→cloud-init→SSH (CYCLE=yes to power-cycle first)"
 	@echo "  console                listen for netconsole messages from booting nodes"
 	@echo "  logs                   show recent build log files"
 
@@ -137,6 +138,14 @@ check-boot-config:
 
 status:
 	TYNET_ENV=$(ENV_FILE) ./check-status
+
+# Verify a node booted through the full netboot chain. Defaults to --no-cycle
+# (looks back in journal); pass CYCLE=yes to power-cycle first.
+# Examples:
+#   make verify-pi2
+#   make verify-pi3 CYCLE=yes
+verify-%:
+	TYNET_ENV=$(ENV_FILE) ./verify-boot $(if $(filter yes,$(CYCLE)),,--no-cycle) $*.$(or $(DOMAIN),tynet.us)
 
 # Listen for netconsole UDP messages from booting nodes.
 # Nodes send kernel log (including overlayroot-nfs hook output) to kickstart:6666.

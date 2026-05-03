@@ -158,7 +158,9 @@ EOF
 
 ##
 # validate_initramfs - verify overlayroot-nfs hook is present in the rebuilt initramfs.
-# Checks both dracut (pre-pivot hook) and initramfs-tools (init-bottom hook) paths.
+# Runs lsinitramfs inside the image via nspawn — host's lsinitramfs can fail to
+# decompress some images (e.g. LZ4 with newer headers). Checks both
+# initramfs-tools (init-bottom) and dracut (pre-pivot/initqueue) hook paths.
 function validate_initramfs {
   local root_dir=${1}
   local initramfs="${root_dir}/boot/initrd.img"
@@ -166,8 +168,12 @@ function validate_initramfs {
   [[ -f "${initramfs}" ]] \
     || { log "ERROR: initramfs not found at ${initramfs}"; exit 1; }
 
-  lsinitramfs "${initramfs}" 2>/dev/null \
-    | grep -qE '(scripts/init-bottom/overlayroot-nfs|dracut/hooks/pre-pivot/[0-9]+-overlayroot-nfs)' \
+  # Capture into a variable first — pipefail + grep -q would SIGPIPE nspawn
+  # mid-output and fail the pipeline even when the match is present.
+  local listing
+  listing=$(systemd-nspawn -q -D "${root_dir}" lsinitramfs /boot/initrd.img 2>/dev/null)
+  echo "${listing}" \
+    | grep -qE '(scripts/init-bottom/overlayroot-nfs|dracut/hooks/(pre-pivot|initqueue)/[0-9]+-overlayroot-nfs)' \
     || { log "ERROR: overlayroot-nfs hook not found in initramfs — rebuild may have failed silently"; exit 1; }
 }
 

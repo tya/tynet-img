@@ -155,19 +155,21 @@ for short in "${NODES[@]}"; do
     fi
   done
 
-  # ── Cloud-init seed dir ───────────────────────────────────────────────────
+  # ── Cloud-init seed (served by serve-cloud-init on port 8000) ──────────────
   ds_url=$(grep -o 'ds=nocloud[^ ]*' "${cmdline_path}" 2>/dev/null | head -1 || true)
   if [[ -n "${ds_url}" ]]; then
-    seed_path=$(echo "${ds_url}" | grep -o 's=http://[^/]*/[0-9]*/[^/;]*' | sed 's|s=http://[^/]*/||' || true)
-    seed_dir="/srv/tftpboot/${seed_path%/}"
-    if [[ -d "${seed_dir}" ]]; then
-      if ls "${seed_dir}/user-data" "${seed_dir}/meta-data" &>/dev/null; then
-        ok "Cloud-init seed: ${seed_dir} has user-data + meta-data"
-      else
-        info "Cloud-init seed: ${seed_dir} exists but missing user-data or meta-data"
-      fi
+    seed_base=$(echo "${ds_url}" | sed 's/.*s=//;s/;.*//' || true)
+    if [[ -n "${seed_base}" ]]; then
+      for f in user-data meta-data network-config; do
+        http_code=$(curl -s -o /dev/null -w '%{http_code}' "${seed_base}${f}" 2>/dev/null || echo "000")
+        if [[ "${http_code}" == "200" ]]; then
+          ok "Cloud-init seed: ${seed_base}${f} → 200"
+        else
+          fail "Cloud-init seed: ${seed_base}${f} → ${http_code}"
+        fi
+      done
     else
-      info "Cloud-init seed: ${seed_dir} not found (may be served separately)"
+      fail "Cloud-init: could not parse seed URL from ds parameter"
     fi
   else
     info "Cloud-init: no ds=nocloud parameter in cmdline"

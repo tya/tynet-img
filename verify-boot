@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# verify-boot — power-cycle a node and verify the full netboot chain:
+# TFTP → NFS root → overlay state mount → cloud-init → SSH+overlay-on-/.
+# Run on kickstart.
+#
+# Usage:
+#   verify-boot <hostname>             # cycle node, then verify (default mode)
+#   verify-boot --no-cycle <hostname>  # skip cycling, look back 15 min in the journal
+#   verify-boot --timeout <sec> <node> # override per-phase timeout (default 90)
+#   verify-boot --lookback <min> <node># --no-cycle window (default 15)
+
+set -Eeuo pipefail
+
+SCRIPT_DIR=$(dirname "$0")
+env_file="${TYNET_ENV:-${SCRIPT_DIR}/tynet.env}"
+# shellcheck source=/dev/null
+source "${env_file}"
+
+ok()      { printf "  \e[32m✓\e[0m %s\n" "$*"; }
+fail()    { printf "  \e[31m✗\e[0m %s\n" "$*"; (( errors++ )) || true; }
+info()    { printf "  \e[33m·\e[0m %s\n" "$*"; }
+section() { echo; printf "\e[1m%s\e[0m\n" "$1"; }
+
+usage() {
+  sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
+  exit 1
+}
+
+cycle=1
+phase_timeout=90
+lookback_min=30
+positional=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-cycle) cycle=0; shift ;;
+    --timeout)  phase_timeout="$2"; shift 2 ;;
+    --lookback) lookback_min="$2"; shift 2 ;;
+    -h|--help)  usage ;;
+    --*)        echo "unknown flag: $1" >&2; exit 2 ;;
+    *)          positional+=("$1"); shift ;;
+  esac
+done
+
+[[ ${#positional[@]} -eq 1 ]] || usage
+node="${positional[0]}"
+short="${node%%.*}"
+KEY=$(tr '[:lower:]' '[:upper:]' <<< "${short}")
+
+ip="${!:-}"     # placeholder, fixed below
+ip_var="NODE_${KEY}_IP"
+mac_var="NODE_${KEY}_MAC"
+serial_var="NODE_${KEY}_SERIAL"
+ip="${!ip_var:-}"
+mac="${!mac_var:-}"
+serial="${!serial_var:-}"
+
+[[ -n "${ip}" ]]  || { echo "no IP for ${node} in ${env_file}"  >&2; exit 1; }
+[[ -n "${mac}" ]] || { echo "no MAC for ${node} in ${env_file}" >&2; exit 1; }
+
+errors=0
+
+# Cloud-init key: serial-keyed dir if it exists, else MAC-keyed
+ci_dir="${SCRIPT_DIR}/serve-cloud-init/cloud-init"
+if [[ -d "${ci_dir}/${serial}" ]]; then
+  ci_key="${serial}"
+elif [[ -d "${ci_dir}/${mac}" ]]; then
+  ci_key="${mac}"
+else
+  ci_key=""
+fi
+
+# Wait for the journal to contain a line matching <pattern> after <since> timestamp.
+# since: a journalctl --since-compatible string, e.g. "2026-05-03 10:00:00"
+wait_for_log() {
+  local pattern="$1" since="$2" label="$3" timeout="${4:-${phase_timeout}}"
+  local end=$(( $(date +%s) + timeout ))
+  local logs
+  while (( $(date +%s) < end )); do
+    # Capture into a variable — pipefail + grep -q would SIGPIPE journalctl.
+    logs=$(sudo journalctl --since "${since}" 2>/dev/null) || true
+    if grep -qE "${pattern}" <<< "${logs}"; then
+      ok "${label}"
+      return 0
+    fi
+    sleep 2
+  done
+  fail "${label} (timeout after ${timeout}s, pattern: ${pattern})"
+  return 1
+}
+
+section "=== verify-boot ${node} ==="
+info "ip=${ip} mac=${mac} ci_key=${ci_key:-<missing>}"
+
+# With --cycle: mark "now", events follow. Without: look back 5 min for the most recent boot.
+if (( cycle )); then
+  since=$(date '+%Y-%m-%d %H:%M:%S')
+  info "cycling power..."
+  if ! cycle-node "${short}" >/dev/null 2>&1; then
+    fail "cycle-node ${short} failed"
+    exit 1
+  fi
+  ok "cycle-node ${short} sent"
+else
+  since=$(date -d "${lookback_min} minutes ago" '+%Y-%m-%d %H:%M:%S')
+  info "checking journal since ${since} (--no-cycle, ${lookback_min}min lookback)"
+fi
+
+# In --no-cycle mode, events are presumably already in the journal: shorten
+# per-phase wait so we fail fast instead of polling for 90s on each missing phase.
+if (( ! cycle )); then
+  phase_timeout=5
+fi
+
+# Phase 1: TFTP request from this IP
+wait_for_log "in\.tftpd\[" "${since}" "TFTP request reached kickstart" 60 || true
+
+# Phase 2: NFS root mount from this IP
+release_var="NODE_${KEY}_RELEASE"
+release="${!release_var:-ubuntu-22.04}"
+wait_for_log "rpc\.mountd.*${ip}.* /exports/netboot/${release} " \
+  "${since}" "NFS root mounted (/exports/netboot/${release})" || true
+
+# Phase 3: Overlay state mount from this IP
+wait_for_log "rpc\.mountd.*${ip}.* /exports/overlay/${node} " \
+  "${since}" "Overlay state mounted (/exports/overlay/${node}) — hook fired" || true
+
+# Phase 4: Cloud-init fetch
+if [[ -n "${ci_key}" ]]; then
+  wait_for_log "tynet-img.*${ip}:.*GET /${ci_key}/meta-data" \
+    "${since}" "Cloud-init meta-data fetched" || true
+else
+  info "skipping cloud-init phase (no seed dir for ${serial} or ${mac})"
+fi
+
+# Phase 5: SSH + overlay on /
+end=$(( $(date +%s) + phase_timeout ))
+ssh_ok=0
+while (( $(date +%s) < end )); do
+  if ssh -o ConnectTimeout=3 -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+       "${node}" "mount | grep -q ' on / type overlay'" 2>/dev/null; then
+    ssh_ok=1
+    break
+  fi
+  sleep 2
+done
+if (( ssh_ok )); then
+  ok "SSH reachable + overlayfs mounted on / (verified on node)"
+else
+  fail "SSH or overlayfs check failed (timeout ${phase_timeout}s)"
+  info "  SSH may fail if your private key isn't loadable (try: ssh-keygen -y -f ~/.ssh/tynet.us)"
+fi
+
+echo
+if (( errors == 0 )); then
+  printf "\e[32mAll phases verified — %s booted cleanly.\e[0m\n" "${node}"
+  exit 0
+else
+  printf "\e[31m%d phase(s) failed — see above.\e[0m\n" "${errors}"
+  exit 1
+fi

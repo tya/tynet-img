@@ -10,3 +10,4 @@ users:
     ssh_authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAw3CX41Cr43qst3bCnB3FNM9DdfvnvCw+9b1dI042GG
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEA9fmxTmPKwxfGw4WJtnJhGI+S1LxTe41sR3rKnZ1LC ty.alexander@gmail.com
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDrmx6egqzoDNYoKC991HlBbIrAZQmz9C5WbY/1EJODD tynet.us
