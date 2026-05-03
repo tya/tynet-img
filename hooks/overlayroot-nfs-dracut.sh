@@ -1,134 +1,120 @@
 #!/bin/sh
-# dracut pre-pivot hook: per-node overlayfs with persistent upper layer.
-# Dracut equivalent of hooks/overlayroot-nfs (initramfs-tools init-bottom).
+# dracut initqueue hook: per-node overlayfs with persistent upper layer.
+# SOURCED by dracut's initqueue loop. Use "return", never "exit".
 #
-# Linux kernel 6.x requires RENAME_WHITEOUT support on the overlayfs upper
-# layer. NFS does not support it, so the upper layer must be a local filesystem
-# (ext4 SSD) or tmpfs.
-#
-# Upper layer selection (in priority order):
-#   1. SSD (overlay_dev= in cmdline): mounts ext4 partition directly as upper.
-#      Writes persist across reboots without any sync service.
-#   2. tmpfs fallback: RAM-backed upper. Saved state is copied from the per-node
-#      NFS state store on boot; writes are synced back to NFS by the
-#      overlayroot-nfs-sync shutdown service.
-#
-# Kernel cmdline parameters:
-#   overlay_host=<hostname>   required — identifies this node's NFS state store
-#   overlay_dev=<device>      optional — e.g. /dev/sda1; enables SSD upper layer
-#
-# Installed by customize-img into:
-#   /usr/lib/dracut/modules.d/50overlayroot-nfs/overlayroot-nfs.sh
+# Strategy: mount NFS root ourselves at /run/overlayroot-lower (doesn't
+# conflict with dracut's nfsroot handler since we use a different path),
+# set up tmpfs upper, mount overlay at NEWROOT. Touch /dev/nfs so
+# dracut's nfsroot finished gate passes immediately.
 
 command -v getarg > /dev/null || . /lib/dracut-lib.sh 2>/dev/null || . /usr/lib/dracut-lib.sh
 
-# Write to kernel ring buffer so messages appear over netconsole and in dmesg.
 kmsg() { echo "<6>overlayroot-nfs: $*" > /dev/kmsg 2>/dev/null || true; }
 
+# Already done — overlay is on NEWROOT
+# shellcheck disable=SC2154
+grep -q " ${NEWROOT} overlay" /proc/mounts 2>/dev/null && return 0
+
 OVERLAY_HOST=$(getarg overlay_host=) || true
-[ -z "${OVERLAY_HOST}" ] && exit 0
+[ -z "${OVERLAY_HOST}" ] && return 0
 
-# Debug: log raw cmdline sources to diagnose getarg failures.
-kmsg "debug proc/cmdline: $(cat /proc/cmdline 2>/dev/null)"
-kmsg "debug getarg nfsroot=$(getarg nfsroot= 2>/dev/null)"
-kmsg "debug getarg netroot=$(getarg netroot= 2>/dev/null)"
+# Parse NFS root params from cmdline
+_nfsroot=$(grep -o 'nfsroot=[^ ]*' /proc/cmdline 2>/dev/null)
+_nfsroot=${_nfsroot#nfsroot=}
+KICKSTART_IP=${_nfsroot%%:*}
+NFS_PATH=${_nfsroot#*:}
+NFS_PATH=${NFS_PATH%%,*}
+NFS_OPTS=${_nfsroot#*,}
+[ "${NFS_OPTS}" = "${_nfsroot}" ] && NFS_OPTS="vers=3"
 
-info "overlayroot-nfs: setting up overlay for ${OVERLAY_HOST}"
-kmsg "start: overlay for ${OVERLAY_HOST}"
+[ -z "${KICKSTART_IP}" ] && return 0
+[ -z "${NFS_PATH}" ] && return 0
+
+# Need network to be up — check for default route (no ping in initramfs)
+grep -q '00000000' /proc/net/route 2>/dev/null || return 0
+
+# Mount state store NFS share early so we can write trace files
+NFS_STATE="/run/overlayroot-nfs"
+mkdir -p "${NFS_STATE}"
+if ! grep -q " ${NFS_STATE} nfs" /proc/mounts 2>/dev/null; then
+    mount -t nfs -o rw,nolock,soft,timeo=50,retrans=2,vers=3 \
+        "${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}" "${NFS_STATE}" \
+        > /dev/null 2>&1 || return 0
+fi
+
+trace() {
+    _up=$(cut -d' ' -f1 /proc/uptime 2>/dev/null)
+    echo "[+${_up}s] $*" >> "${NFS_STATE}/debug.txt" 2>/dev/null
+    kmsg "$*"
+}
+
+trace "hook fired (overlay_host=${OVERLAY_HOST})"
 
 UPPER_DIR="/run/overlayroot-upper"
-mkdir -p "${UPPER_DIR}"
+LOWER="/run/overlayroot-lower"
+mkdir -p "${UPPER_DIR}" "${LOWER}"
 
-NFS_STATE=""   # set below if using NFS fallback
+# 1. Mount NFS root ourselves at LOWER (separate from dracut's NEWROOT mount)
+if ! grep -q " ${LOWER} nfs" /proc/mounts 2>/dev/null; then
+    _err=$(mount -t nfs -vvv -o "ro,nolock,soft,timeo=50,retrans=2,${NFS_OPTS}" \
+            "${KICKSTART_IP}:${NFS_PATH}" "${LOWER}" 2>&1)
+    _rc=$?
+    if [ "${_rc}" -ne 0 ]; then
+        trace "FAILED: NFS root mount (rc=${_rc}):"
+        echo "${_err}" | sed 's/^/    /' >> "${NFS_STATE}/debug.txt" 2>/dev/null
+        trace "kernel msgs (last 20):"
+        dmesg | tail -20 | sed 's/^/    /' >> "${NFS_STATE}/debug.txt" 2>/dev/null
+        return 0
+    fi
+    trace "NFS root mounted at ${LOWER}"
+fi
+
+# 2. Set up upper layer
 SSD_MOUNTED=0
-
 SSD_DEV=$(getarg overlay_dev=) || true
 if [ -n "${SSD_DEV}" ]; then
-    kmsg "SSD mode: waiting for ${SSD_DEV}"
     _tries=0
-    while [ ! -b "${SSD_DEV}" ] && [ "${_tries}" -lt 10 ]; do
-        sleep 1
-        _tries=$((_tries + 1))
-    done
-
+    while [ ! -b "${SSD_DEV}" ] && [ "${_tries}" -lt 10 ]; do sleep 1; _tries=$((_tries + 1)); done
     if [ -b "${SSD_DEV}" ] && mount -t ext4 -o noatime "${SSD_DEV}" "${UPPER_DIR}"; then
         mkdir -p "${UPPER_DIR}/upper" "${UPPER_DIR}/work"
-        kmsg "SSD mounted as overlay upper: ${SSD_DEV}"
         SSD_MOUNTED=1
-    else
-        kmsg "SSD mount failed (${SSD_DEV}), falling back to tmpfs+NFS"
+        trace "upper on SSD ${SSD_DEV}"
     fi
 fi
 
 if [ "${SSD_MOUNTED}" -eq 0 ]; then
-    # tmpfs fallback: need kickstart IP to reach NFS state store.
-    # Try nfsroot= first; dracut's parse-nfsroot.sh may have consumed it and
-    # rewritten it as netroot=nfs:IP:PATH:opts — fall back to that format.
-    # Last resort: parse /proc/cmdline directly, bypassing getarg entirely.
-    KICKSTART_IP=$(getarg nfsroot= | cut -d: -f1) || true
-    if [ -z "${KICKSTART_IP}" ]; then
-        KICKSTART_IP=$(getarg netroot= | sed 's|^nfs:\([^:]*\):.*|\1|') || true
+    if ! grep -q " ${UPPER_DIR} tmpfs" /proc/mounts 2>/dev/null; then
+        mount -t tmpfs tmpfs "${UPPER_DIR}" || {
+            trace "FAILED: tmpfs upper"
+            return 0
+        }
     fi
-    if [ -z "${KICKSTART_IP}" ]; then
-        _nfsroot=$(grep -o 'nfsroot=[^ ]*' /proc/cmdline 2>/dev/null)
-        _nfsroot=${_nfsroot#nfsroot=}
-        KICKSTART_IP=${_nfsroot%%:*}
-    fi
-    if [ -z "${KICKSTART_IP}" ]; then
-        warn "overlayroot-nfs: cannot determine kickstart IP from nfsroot= or netroot="
-        kmsg "FAILED: cannot determine kickstart IP from nfsroot= or netroot="
-        exit 0
-    fi
-    kmsg "tmpfs+NFS mode: kickstart=${KICKSTART_IP}"
-
-    # Mount per-node NFS state store (read the saved upper layer from here)
-    NFS_STATE="/run/overlayroot-nfs"
-    mkdir -p "${NFS_STATE}"
-    if ! mount -t nfs -o rw,nolock,soft,timeo=100,retrans=2,vers=3 \
-            "${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}" "${NFS_STATE}"; then
-        warn "overlayroot-nfs: failed to mount NFS state store"
-        kmsg "FAILED: could not mount NFS state store ${KICKSTART_IP}:/exports/overlay/${OVERLAY_HOST}"
-        exit 0
-    fi
-    kmsg "mounted NFS state store"
-
-    # Create tmpfs upper layer (kernel 6.x requires RENAME_WHITEOUT on upper;
-    # NFS does not support it — tmpfs does)
-    mount -t tmpfs tmpfs "${UPPER_DIR}"
     mkdir -p "${UPPER_DIR}/upper" "${UPPER_DIR}/work"
-    kmsg "tmpfs upper created"
+    trace "upper on tmpfs"
 
-    # Restore saved state from NFS into the tmpfs upper layer
     if [ -d "${NFS_STATE}/upper" ] && [ "$(ls -A "${NFS_STATE}/upper" 2>/dev/null)" ]; then
         cp -a "${NFS_STATE}/upper/." "${UPPER_DIR}/upper/"
-        kmsg "restored saved state from NFS upper"
+        trace "restored saved state"
     else
-        kmsg "no saved state — starting fresh"
+        trace "fresh start"
     fi
 fi
 
-# Bind-mount the current NFS root as the read-only lower layer.
-# Make it private immediately to prevent the overlay mount (which goes on
-# top of NEWROOT) from propagating back into this bind via shared propagation,
-# which would create a circular mount dependency and hang the kernel.
-LOWER="/run/overlayroot-lower"
-mkdir -p "${LOWER}"
-# shellcheck disable=SC2154  # NEWROOT is set by the dracut framework
-mount --bind "${NEWROOT}" "${LOWER}"
-mount --make-private "${LOWER}"
-kmsg "lower bind-mounted (private)"
-mount --bind -o remount,ro "${LOWER}"
-kmsg "lower remounted ro"
+# 3. If dracut already mounted NFS at NEWROOT, unmount it (we'll replace with overlay)
+if grep -q " ${NEWROOT} nfs" /proc/mounts 2>/dev/null; then
+    umount "${NEWROOT}" 2>/dev/null || trace "warning: could not unmount existing NFS at ${NEWROOT}"
+fi
 
-# Mount overlayfs at NEWROOT
+# 4. Mount overlay at NEWROOT
 if ! mount -t overlay overlay \
         -o "lowerdir=${LOWER},upperdir=${UPPER_DIR}/upper,workdir=${UPPER_DIR}/work" \
         "${NEWROOT}"; then
-    warn "overlayroot-nfs: overlay mount failed, falling back to plain NFS root"
-    kmsg "FAILED: overlay mount failed — falling back to plain NFS root"
-    umount "${UPPER_DIR}" 2>/dev/null || true
-    umount "${LOWER}"
-    [ -n "${NFS_STATE}" ] && umount "${NFS_STATE}" 2>/dev/null || true
-    exit 0
+    trace "FAILED: overlay mount"
+    return 0
 fi
-kmsg "done: overlay mounted — switch_root handoff to ${OVERLAY_HOST}"
+
+# 5. Create /dev/nfs and /dev/root so dracut's nfsroot finished gate passes
+[ -e /dev/nfs ] || ln -s null /dev/nfs
+[ -e /dev/root ] || ln -s null /dev/root
+
+trace "overlay mounted at ${NEWROOT}"
