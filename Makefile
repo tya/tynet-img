@@ -25,7 +25,7 @@ help:
 	@echo "  update-base            apply security patches to the shared base image"
 	@echo "  wipe-release-<name>    wipe a netboot release dir (e.g. make wipe-release-ubuntu-22.04)"
 	@echo "  wipe-tftp              wipe all per-node TFTP dirs (re-run pi to repopulate)"
-	@echo "  wipe-tftp-<mac>        wipe a single node's TFTP dir (e.g. make wipe-tftp-dc-a6-32-8d-f3-ca)"
+	@echo "  wipe-tftp-<key>        wipe a single node's TFTP dir; key is mac/serial/hostname (e.g. make wipe-tftp-pi2)"
 	@echo ""
 	@echo "Node maintenance (run on kickstart):"
 	@echo "  wipe-overlay-<node>    wipe a single node's overlay (e.g. make wipe-overlay-pi2)"
@@ -78,12 +78,17 @@ wipe-tftp:
 	sudo rm -rf /srv/tftpboot/*/
 	sudo mkdir -p /srv/tftpboot
 
-# Wipe a single node's TFTP dir: make wipe-tftp-244634d3
+# Wipe a single node's TFTP dir: make wipe-tftp-pi2 / -244634d3 / -dc-a6-32-8d-f3-ca
+# Resolves through serial/hostname symlinks to the real MAC-keyed dir.
 wipe-tftp-%:
-	@[ -d /srv/tftpboot/$* ] || { echo "ERROR: /srv/tftpboot/$* does not exist"; exit 1; }
-	@echo "Wiping /srv/tftpboot/$*"
-	sudo rm -rf /srv/tftpboot/$*
-	sudo mkdir -p /srv/tftpboot/$*
+	@[ -e /srv/tftpboot/$* ] || { echo "ERROR: /srv/tftpboot/$* does not exist"; exit 1; }
+	@target=$$(sudo readlink -f /srv/tftpboot/$*); \
+	  case "$$target" in /srv/tftpboot/?*) ;; \
+	    *) echo "ERROR: refusing to wipe $$target (outside /srv/tftpboot/)"; exit 1 ;; \
+	  esac; \
+	  echo "Wiping $$target (key: $*)"; \
+	  sudo rm -rf "$$target"; \
+	  sudo mkdir -p "$$target"
 
 # Wipe one node's overlay: make wipe-overlay-pi2
 # The node must be offline or rebooted after this.
