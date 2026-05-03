@@ -18,7 +18,8 @@ The flow is:
 customize-img          # customize shared base image for NFS netboot (node-agnostic)
 extract-img            # download + extract Ubuntu ARM64 image
 build-node             # provision per-node TFTP dir + overlay dirs
-tynet.env             # node inventory (MACs, serials, IPs, releases) — bash-sourceable
+tynet.env.example      # reference format; real tynet.env is generated on the kickstart host
+                       # by tynet-infra Ansible from its inventory (gitignored)
 hooks/
   overlayroot-nfs      # initramfs hook — sets up overlayfs on boot
   overlayroot-nfs-sync # systemd shutdown service — syncs tmpfs upper to NFS state store
@@ -73,7 +74,7 @@ make pi               # provision all nodes
 - `extract-img` caches the downloaded `.img` in `/var/cache/img/` and skips re-download if already present. rsync exit code 23 (partial transfer due to special files) is treated as success.
 - `customize-img` validates that `root_dir` (`/exports/netboot/<release>/`) contains `usr/` before modifying — prevents host corruption if extraction fails.
 - `customize-img` is **node-agnostic**: it customizes the shared base image only. No `serial`, `hostname`, or `overlay_dev` params.
-- `build-node` reads all per-node config from `tynet.env` (sourced as bash). To add a node: add a `NODE_<SHORTNAME>_*` block to `tynet.env` and re-run `make kickstart` in tynet-infra to update `/etc/exports`.
+- `build-node` reads all per-node config from `tynet.env` (sourced as bash). The file is **generated** on the kickstart host by Ansible in `../tynet-infra` from its inventory — to add a node, edit `tynet-infra/inventory/host_vars/<host>.yml` (and `inventory/production.ini`) and re-run `make kickstart`. The committed `tynet.env.example` is for reference only; the real file is gitignored.
 - TFTP dirs are keyed by MAC address (`/srv/tftpboot/<mac>/`) matching Pi EEPROM `TFTP_PREFIX=2` behaviour.
 - `cmdline.txt` uses `ds=nocloud;s=http://<kickstart_ip>:8000/<serial>/` for cloud-init.
 - NFS exports use `10.0.60.0/24` subnet restriction — managed by Ansible kickstart role in tynet-infra (`group_vars/all.yml`).

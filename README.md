@@ -80,9 +80,18 @@ make pi3
 make pi   # all nodes
 ```
 
-### `tynet.env`
+### `tynet.env` (generated)
 
-Bash-sourceable node inventory. Used by `build-node` and `check-status`. Edit this to add or reconfigure nodes.
+Bash-sourceable node inventory. Used by `build-node`, `check-status`,
+`check-boot-config`, and `verify-boot`.
+
+**Source of truth lives in `../tynet-infra`.** The real `tynet.env` is
+rendered onto the kickstart host by the kickstart Ansible role from
+`tynet-infra/inventory/group_vars/all.yml` and
+`tynet-infra/inventory/host_vars/<host>.yml`. To change a node's config,
+edit those files and re-run `make kickstart` in tynet-infra. The file is
+gitignored in this repo; `tynet.env.example` documents the format for
+reference.
 
 ```bash
 KICKSTART_IP=10.0.60.100
@@ -175,7 +184,9 @@ make cycle-pi3           # power-cycle pi3 via Unifi PoE
 ## Provisioning a new node
 
 ```bash
-# 1. Add node block to tynet.env (serial, MAC, IP, release)
+# 1. Add node to tynet-infra inventory:
+#    - tynet-infra/inventory/production.ini  (add to [nodes])
+#    - tynet-infra/inventory/host_vars/<host>.yml  (serial, MAC, IP, release, fsid)
 
 # 2. Add cloud-init seed data:
 #    serve-cloud-init/cloud-init/<serial>/meta-data
@@ -183,7 +194,7 @@ make cycle-pi3           # power-cycle pi3 via Unifi PoE
 
 # 3. Add DHCP reservation in Unifi (MAC → IP)
 
-# 4. Re-run kickstart Ansible to update NFS exports:
+# 4. Re-run kickstart Ansible — renders tynet.env from inventory + updates NFS exports:
 cd ../tynet-infra && make kickstart
 
 # 5. Build base image if not already done:

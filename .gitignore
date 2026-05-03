@@ -2,3 +2,8 @@
 !/serve-cloud-init/
 /serve-cloud-init/tynet-img
 tmp/
+
+# tynet.env is generated on the kickstart host by tynet-infra Ansible from
+# its inventory (group_vars/all.yml + host_vars/*.yml). The committed copy
+# is tynet.env.example for documentation only.
+/tynet.env
