@@ -58,7 +58,7 @@ root_dir="/exports/netboot/${nfs_release}"
 tftp_dir="/srv/tftpboot/${mac}"
 overlay_dir="/exports/overlay/${hostname}"
 
-cloudinit_dir="${SCRIPT_DIR}/serve-cloud-init/cloud-init"
+cloudinit_dir="${SCRIPT_DIR}/../tynet-cloud-init/cloud-init"
 [[ -d "${cloudinit_dir}/${serial}" ]] \
   || { log "ERROR: cloud-init seed dir not found at ${cloudinit_dir}/${serial} — re-run 'make kickstart' in tynet-infra to render seed files"; exit 1; }
 cloudinit_key="${serial}"

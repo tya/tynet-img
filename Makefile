@@ -1,9 +1,7 @@
-BINARY      = serve-cloud-init
-CMD_DIR     = serve-cloud-init
 OVERLAY_DIR = /exports/overlay
 ENV_FILE   ?= tynet.env
 
-.PHONY: help build build-linux test clean \
+.PHONY: help \
         pi2 pi3 pi \
         update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% reboot-nodes \
         logs status check-boot-config verify-% console cycle-pi2 cycle-pi3
@@ -12,12 +10,6 @@ ENV_FILE   ?= tynet.env
 
 help:
 	@echo "Usage: make <target>"
-	@echo ""
-	@echo "Build:"
-	@echo "  build                  build serve-cloud-init for local machine"
-	@echo "  build-linux            cross-compile serve-cloud-init for linux/amd64"
-	@echo "  test                   run Go unit tests"
-	@echo "  clean                  remove built binary"
 	@echo ""
 	@echo "Image build (run on kickstart — one per release, node-agnostic):"
 	@echo "  ubuntu-<ver>           extract + customize shared base image (e.g. make ubuntu-26.04)"
@@ -46,18 +38,6 @@ help:
 	@echo "  verify-<node>          verify a node booted through TFTP→NFS→overlay→cloud-init→SSH (CYCLE=yes to power-cycle first)"
 	@echo "  console                listen for netconsole messages from booting nodes"
 	@echo "  logs                   show recent build log files"
-
-build:
-	cd $(CMD_DIR) && go build -o ../$(BINARY) .
-
-build-linux:
-	cd $(CMD_DIR) && GOOS=linux GOARCH=amd64 go build -o ../$(BINARY) .
-
-test:
-	cd $(CMD_DIR) && go test -v .
-
-clean:
-	rm -f $(BINARY)
 
 # Pattern rule: works for any release (e.g. make ubuntu-28.04).
 # Add the new release's image URL to IMAGE_URLS in extract-img first.

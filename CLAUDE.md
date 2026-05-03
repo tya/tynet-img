@@ -23,16 +23,11 @@ tynet.env.example      # reference format; real tynet.env is generated on the ki
 hooks/
   overlayroot-nfs      # initramfs hook — sets up overlayfs on boot
   overlayroot-nfs-sync # systemd shutdown service — syncs tmpfs upper to NFS state store
-serve-cloud-init/
-  main.go              # HTTP server for per-node cloud-init seed data
-  cloud-init/          # per-node seed files served on :8000/<serial>/ — gitignored,
-                       # rendered by tynet-infra Ansible from inventory + keys/*.pub
-  testdata/cloud-init/ # checked-in fixtures for `go test` (244634d3, a43386be, testnode)
 vms/                   # Lima VM test environment (kickstart + node) — TEST ONLY
 tmp/                   # gitignored local runtime artifacts (cache, exports)
 ```
 
-Kickstart host provisioning (packages, tftpd, NFS, cloud-init service) lives in `../tynet-infra` — run `make kickstart` from there.
+Kickstart host provisioning (packages, tftpd, NFS, cloud-init service) lives in `../tynet-infra` — run `make kickstart` from there. The cloud-init HTTP server itself lives in `../tynet-cloud-init` (separate repo).
 
 ## Running the scripts
 
@@ -78,8 +73,7 @@ make pi               # provision all nodes
 - `customize-img` is **node-agnostic**: it customizes the shared base image only. No `serial`, `hostname`, or `overlay_dev` params.
 - `build-node` reads all per-node config from `tynet.env` (sourced as bash). The file is **generated** on the kickstart host by Ansible in `../tynet-infra` from its inventory — to add a node, edit `tynet-infra/inventory/host_vars/<host>.yml` (and `inventory/production.ini`) and re-run `make kickstart`. The committed `tynet.env.example` is for reference only; the real file is gitignored.
 - TFTP dirs are keyed by MAC address (`/srv/tftpboot/<mac>/`) matching Pi EEPROM `TFTP_PREFIX=2` behaviour.
-- `cmdline.txt` uses `ds=nocloud;s=http://<kickstart_ip>:8000/<serial>/` for cloud-init.
-- Cloud-init seed files (meta-data, user-data, network-config, vendor-data) are rendered onto the kickstart host by Ansible in `../tynet-infra` from inventory plus `keys/*.pub`. Seed dirs are keyed by serial. The directory is gitignored; `serve-cloud-init/testdata/cloud-init/` holds fixtures for `go test`.
+- `cmdline.txt` uses `ds=nocloud;s=http://<kickstart_ip>:8000/<serial>/` for cloud-init. The HTTP server (`tynet-cloud-init` repo) and the per-node seed files (rendered by tynet-infra Ansible from inventory plus `tynet-infra/keys/*.pub`) live outside this repo.
 - NFS exports use `10.0.60.0/24` subnet restriction — managed by Ansible kickstart role in tynet-infra (`group_vars/all.yml`).
 
 ## Overlay filesystem design

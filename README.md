@@ -111,19 +111,11 @@ NODE_PI3_RELEASE=ubuntu-26.04
 NODE_PI3_OVERLAY_DEV=/dev/sda1   # optional: SSD upper layer
 ```
 
-### `serve-cloud-init`
+### Cloud-init HTTP server
 
-Go program serving per-node cloud-init seed data over HTTP on port 8000.
-Managed as a systemd service by the kickstart Ansible role in tynet-infra.
-
-```bash
-./serve-cloud-init -dir ~/src/tynet-img/serve-cloud-init/cloud-init
-```
-
-Seed files (`meta-data`, `user-data`, `network-config`, `vendor-data`) live in
-`serve-cloud-init/cloud-init/<serial>/` — **rendered by tynet-infra Ansible**
-from inventory plus `keys/*.pub`. The directory is gitignored; canonical
-fixtures used by `go test` are in `serve-cloud-init/testdata/cloud-init/`.
+The cloud-init HTTP server is a separate repo: [tynet-cloud-init](https://github.com/tya/tynet-cloud-init).
+It's built and managed as a systemd service by the kickstart Ansible role in tynet-infra,
+and serves per-node seed files rendered from `tynet-infra` inventory.
 
 ## Overlay filesystem
 

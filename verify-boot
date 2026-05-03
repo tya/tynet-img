@@ -59,15 +59,11 @@ serial="${!serial_var:-}"
 
 errors=0
 
-# Cloud-init key: serial-keyed dir if it exists, else MAC-keyed
-ci_dir="${SCRIPT_DIR}/serve-cloud-init/cloud-init"
-if [[ -d "${ci_dir}/${serial}" ]]; then
-  ci_key="${serial}"
-elif [[ -d "${ci_dir}/${mac}" ]]; then
-  ci_key="${mac}"
-else
-  ci_key=""
-fi
+# Cloud-init seed dir is rendered by tynet-infra Ansible into the
+# tynet-cloud-init clone; dirs are keyed by serial.
+ci_dir="${SCRIPT_DIR}/../tynet-cloud-init/cloud-init"
+ci_key=""
+[[ -d "${ci_dir}/${serial}" ]] && ci_key="${serial}"
 
 # Wait for the journal to contain a line matching <pattern> after <since> timestamp.
 # since: a journalctl --since-compatible string, e.g. "2026-05-03 10:00:00"
