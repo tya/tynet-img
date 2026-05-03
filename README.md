@@ -111,12 +111,6 @@ NODE_PI3_RELEASE=ubuntu-26.04
 NODE_PI3_OVERLAY_DEV=/dev/sda1   # optional: SSD upper layer
 ```
 
-### Cloud-init HTTP server
-
-The cloud-init HTTP server is a separate repo: [tynet-cloud-init](https://github.com/tya/tynet-cloud-init).
-It's built and managed as a systemd service by the kickstart Ansible role in tynet-infra,
-and serves per-node seed files rendered from `tynet-infra` inventory.
-
 ## Overlay filesystem
 
 Each Pi runs overlayfs for a writable root without modifying the shared base:
