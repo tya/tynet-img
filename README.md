@@ -12,7 +12,7 @@ Pi (power on)
   └── TFTP  → /srv/tftpboot/<mac>/            (boot files + cmdline.txt)
   └── NFS   → /exports/netboot/<release>/     (shared read-only root)
   └── NFS   → /exports/overlay/<hostname>/   (per-node state store)
-  └── HTTP  → :8000/<serial>/                 (cloud-init user-data + meta-data)
+  └── HTTP  → :8000/<mac>/                    (cloud-init user-data + meta-data)
 ```
 
 ## Infrastructure

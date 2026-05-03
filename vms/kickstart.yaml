@@ -71,5 +71,5 @@ message: |
   After provisioning, test from the node VM:
     tftp 192.168.105.10 -c get testnode/vmlinuz
     sudo mount -t nfs 192.168.105.10:/exports/netboot/ubuntu-26.04 /mnt
-    curl http://192.168.105.10:8000/testnode/meta-data
+    curl http://192.168.105.10:8000/52-55-55-60-97-49/meta-data
   -----------------------------------------------------------------------

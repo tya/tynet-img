@@ -73,7 +73,7 @@ make pi               # provision all nodes
 - `customize-img` is **node-agnostic**: it customizes the shared base image only. No `serial`, `hostname`, or `overlay_dev` params.
 - `build-node` reads all per-node config from `tynet.env` (sourced as bash). The file is **generated** on the kickstart host by Ansible in `../tynet-infra` from its inventory — to add a node, edit `tynet-infra/inventory/host_vars/<host>.yml` (and `inventory/production.ini`) and re-run `make kickstart`. The committed `tynet.env.example` is for reference only; the real file is gitignored.
 - TFTP dirs are keyed by MAC address (`/srv/tftpboot/<mac>/`) matching Pi EEPROM `TFTP_PREFIX=2` behaviour.
-- `cmdline.txt` uses `ds=nocloud;s=http://<kickstart_ip>:8000/<serial>/` for cloud-init. What lives behind that URL is out of scope here.
+- `cmdline.txt` uses `ds=nocloud;s=http://<kickstart_ip>:8000/<mac>/` for cloud-init. What lives behind that URL is out of scope here.
 - NFS exports use `10.0.60.0/24` subnet restriction — managed by Ansible kickstart role in tynet-infra (`group_vars/all.yml`).
 
 ## Overlay filesystem design

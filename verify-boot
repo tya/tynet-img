@@ -116,7 +116,7 @@ wait_for_log "rpc\.mountd.*${ip}.* /exports/overlay/${node} " \
   "${since}" "Overlay state mounted (/exports/overlay/${node}) — hook fired" || true
 
 # Phase 4: Cloud-init fetch
-wait_for_log "serve-cloud-init.*${ip}:.*GET /${serial}/meta-data" \
+wait_for_log "serve-cloud-init.*${ip}:.*GET /${mac}/meta-data" \
   "${since}" "Cloud-init meta-data fetched" || true
 
 # Phase 5: SSH + overlay on /

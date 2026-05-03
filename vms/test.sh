@@ -13,7 +13,7 @@
 set -euo pipefail
 
 KICKSTART=192.168.105.10
-SERIAL=testnode
+MAC=52-55-55-60-97-49
 WORK=$(mktemp -d)
 PASS=0
 FAIL=0
@@ -139,14 +139,14 @@ fi
 
 echo
 echo "── 5. cloud-init HTTP ───────────────────────────────────────────"
-META=$(curl -sf "http://$KICKSTART:8000/$SERIAL/meta-data")
+META=$(curl -sf "http://$KICKSTART:8000/$MAC/meta-data")
 if echo "$META" | grep -q "instance-id"; then
     pass "meta-data reachable (instance-id: $(echo "$META" | grep instance-id | cut -d' ' -f2))"
 else
     fail "meta-data missing or malformed"
 fi
 
-USER=$(curl -sf "http://$KICKSTART:8000/$SERIAL/user-data")
+USER=$(curl -sf "http://$KICKSTART:8000/$MAC/user-data")
 if echo "$USER" | grep -q "#cloud-config"; then
     pass "user-data reachable and starts with #cloud-config"
 else
