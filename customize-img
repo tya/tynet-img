@@ -100,8 +100,10 @@ function install_overlay_hook {
   local script_dir
   script_dir=$(dirname "$0")
 
-  if [[ -d "${root_dir}/usr/lib/dracut" ]]; then
+  if [[ -x "${root_dir}/usr/bin/dracut" ]]; then
     # dracut-based image: install as a dracut module
+    # Detect by binary, not /usr/lib/dracut directory: bcache-tools installs a
+    # 90bcache module under that path even on initramfs-tools-based images.
     local module_dir="${root_dir}/usr/lib/dracut/modules.d/50overlayroot-nfs"
     mkdir -p "${module_dir}"
     cp "${script_dir}/hooks/overlayroot-nfs-dracut-setup.sh" "${module_dir}/module-setup.sh"
