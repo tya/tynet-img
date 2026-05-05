@@ -83,8 +83,11 @@ chmod -R a+r "${tftp_dir}/"
 # 3. Write per-node cmdline.txt
 log "--- write cmdline.txt"
 overlay_dev_param=""
-[[ -n "${overlay_dev}" ]] && overlay_dev_param=" overlay_dev=${overlay_dev}"
-cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${KICKSTART_IP}:${root_dir},vers=3 ro ip=dhcp rootwait swiotlb=noforce overlay_host=${hostname}${overlay_dev_param} netconsole=6665@${node_ip}/eth0,6666@${KICKSTART_IP}/${KICKSTART_MAC} ds=nocloud;s=http://${KICKSTART_IP}:8000/${mac}/"
+# When an SSD is configured as the overlay upper, force usb-storage BOT mode
+# for the Samsung T7 (vid:04e8, pid:4001). UAS triggers data-in submit errors
+# on the Pi 4 + T7 combo that prevent the ext4 journal from loading at boot.
+[[ -n "${overlay_dev}" ]] && overlay_dev_param=" overlay_dev=${overlay_dev} usb-storage.quirks=04e8:4001:u"
+cmdline="console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=${KICKSTART_IP}:${root_dir},vers=3 ro ip=dhcp rootwait overlay_host=${hostname}${overlay_dev_param} netconsole=6665@${node_ip}/eth0,6666@${KICKSTART_IP}/${KICKSTART_MAC} ds=nocloud;s=http://${KICKSTART_IP}:8000/${mac}/"
 echo "${cmdline}" > "${tftp_dir}/cmdline.txt"
 
 # 4. Create overlay dirs
