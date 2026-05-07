@@ -21,8 +21,9 @@ build-node             # provision per-node TFTP dir + overlay dirs
 tynet.env.example      # reference format; real tynet.env is generated on the kickstart host
                        # by tynet-infra Ansible from its inventory (gitignored)
 hooks/
-  overlayroot-nfs      # initramfs hook — sets up overlayfs on boot
+  overlayroot-nfs      # initramfs hook — sets up overlayfs on boot (SSD upper or tmpfs+NFS)
   overlayroot-nfs-sync # systemd shutdown service — syncs tmpfs upper to NFS state store
+                       # (no-op when running in SSD-upper mode)
 vms/                   # Lima VM test environment (kickstart + node) — TEST ONLY
 tmp/                   # gitignored local runtime artifacts (cache, exports)
 ```
@@ -79,25 +80,29 @@ make pi               # provision all nodes
 ## Overlay filesystem design
 
 Each node runs overlayfs with:
-- **lower**: read-only NFS root (`/exports/netboot/ubuntu-22.04`)
-- **upper**: tmpfs (RAM-backed) — required because Linux 6.x needs `RENAME_WHITEOUT` on upper, which NFS doesn't support
-- **state store**: per-node NFS share (`/exports/overlay/<hostname>/`) — upper layer is synced here on shutdown and restored on boot
+- **lower**: read-only NFS root (`/exports/netboot/ubuntu-22.04`), bind-mounted private and remounted read-only
+- **upper**: one of two modes, selected by whether `overlay_dev=` is in the kernel cmdline (set by `build-node` when `NODE_<host>_OVERLAY_DEV` is defined in `tynet.env`):
+  - **SSD mode** (production — pi2, pi3): an ext4 partition on a local USB SSD (e.g. `/dev/sda1`) is mounted directly as the upper layer. Writes persist locally across reboots; no shutdown sync runs.
+  - **tmpfs+NFS fallback** (no `overlay_dev=`): tmpfs upper, with state restored from the per-node NFS state store on boot and synced back on shutdown. Used when no SSD is attached, or as fallback if SSD mount fails.
+- **state store** (tmpfs mode only): per-node NFS share (`/exports/overlay/<hostname>/`) on the kickstart host. Unused in SSD mode — `make status` reports `n/a (ssd)` for these nodes' LAST SYNC.
+
+Linux 6.x requires `RENAME_WHITEOUT` on the overlayfs upper layer; NFS does not support it, which is why the upper must be a local filesystem (ext4 SSD) or tmpfs and cannot be NFS directly.
 
 ### overlayroot-nfs (initramfs hook)
 
 Runs as `init-bottom` — after NFS root is mounted, before `pivot_root`. Steps:
-1. Reads `overlay_host=` and kickstart IP from `nfsroot=` in kernel cmdline
-2. Mounts `<kickstart>:/exports/overlay/<hostname>` (NFSv3, rw) as the NFS state store
-3. Creates tmpfs with `upper/` and `work/` subdirs
-4. Copies saved state from NFS state store into tmpfs upper (state restore)
-5. Bind-mounts NFS root as read-only lower layer
-6. Mounts overlayfs at `rootmnt`
-7. Moves all sub-mounts into the new root before `pivot_root`
-8. Falls back to plain NFS root if any step fails
+1. Reads `overlay_host=` and (optionally) `overlay_dev=` from kernel cmdline; exits if no `overlay_host=`.
+2. **If `overlay_dev=` is set (SSD mode)**: waits up to 10s for the device, then mounts it ext4 at `/run/overlayroot-upper`. On success, skips all NFS state-store work.
+3. **Otherwise (tmpfs+NFS fallback)**: parses kickstart IP from `nfsroot=`, mounts `<kickstart>:/exports/overlay/<hostname>` (NFSv3, rw) at `/run/overlayroot-nfs`, creates tmpfs at `/run/overlayroot-upper`, and copies any saved state from the NFS state store into the tmpfs upper.
+4. Bind-mounts NFS root as a private read-only lower layer at `/run/overlayroot-lower`.
+5. Mounts overlayfs at `rootmnt` with `lowerdir`/`upperdir`/`workdir`.
+6. Falls back to plain NFS root if any step fails.
 
 ### overlayroot-nfs-sync (shutdown service)
 
-Systemd service that runs before halt/reboot/shutdown. Rsyncs the live tmpfs upper layer back to `/exports/overlay/<hostname>/upper/` on the kickstart host, persisting writes across reboots.
+Systemd `Type=oneshot` service wired `Before=shutdown.target reboot.target halt.target`. Rsyncs the live tmpfs upper layer back to `/exports/overlay/<hostname>/upper/` on the kickstart host, persisting writes across reboots.
+
+**No-op in SSD mode**: the script checks for `/run/overlayroot-nfs` (only mounted in tmpfs fallback) and early-exits with `"NFS state store not mounted at /run/overlayroot-nfs (SSD mode or already unmounted)"` if absent. SSD-mode nodes don't need it because writes already persist on the local ext4 upper.
 
 ### systemd-nspawn for initramfs rebuild
 
