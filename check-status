@@ -86,9 +86,14 @@ for node in "${HOSTNAMES[@]}"; do
     ssh_key="—"
   fi
 
-  # Last sync: mtime of the overlay upper dir on kickstart
+  # Last sync: mtime of the overlay upper dir on kickstart.
+  # SSD nodes don't sync to the NFS state store — writes persist locally on the
+  # SSD upper layer, so /exports/overlay/<host>/upper is never written and its
+  # mtime would be misleading (perma-epoch).
   upper_dir="${OVERLAY_DIR}/${node}/upper"
-  if [[ -d "${upper_dir}" ]]; then
+  if [[ "${configured_upper}" == "ssd" ]]; then
+    last_sync="n/a (ssd)"
+  elif [[ -d "${upper_dir}" ]]; then
     last_sync=$(stat -c '%y' "${upper_dir}" | cut -c1-16)
   else
     last_sync="never"
