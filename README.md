@@ -237,6 +237,31 @@ make clean-deb           # remove dist/
 
 Power-cycling and k8s-aware reboots live in `~/src/tynet-infra` (`make cycle-pi2`, `make cycle-pi3`, `make reboot-nodes`).
 
+## Pi EEPROM setup (one-time, per Pi)
+
+A stock Raspberry Pi 4 won't attempt network boot by default — and even if it does, it asks for `/<serial>/start4.elf` over TFTP, but `build-node` writes boot files under `/srv/tftpboot/<mac>/`. Two EEPROM settings need to be flipped once per Pi. Boot the Pi off an SD card or USB first, SSH in, then:
+
+```bash
+sudo -E rpi-eeprom-config --edit
+```
+
+Ensure the config contains:
+
+```
+BOOT_ORDER=0xf21   # try SD first, then network (read right-to-left: 1=SD, 2=NETWORK, f=restart sequence)
+TFTP_PREFIX=2      # use MAC address as the TFTP path prefix (matches /srv/tftpboot/<mac>/)
+```
+
+Save (`Ctrl-O`, `Enter`, `Ctrl-X` in nano), then reboot:
+
+```bash
+sudo reboot
+```
+
+Pull the SD card during the reboot — SD boot will fail, the Pi will fall through to network, and request `/srv/tftpboot/<mac>/start4.elf` from kickstart. `make console` on kickstart shows netconsole output once the overlayroot-nfs hook fires; `check-netboot` shows TFTP/NFS activity in the journal.
+
+The Pi's MAC and serial are stable and printed on the board; both end up in `tynet.env`.
+
 ## Provisioning a new node
 
 ```bash
@@ -259,7 +284,9 @@ make pi2   # or whichever node
 # 6. Deploy SSH host key:
 cd ~/src/tynet-infra && make nodes LIMIT=pi2.tynet.us
 
-# 7. Power on — node netboots and runs cloud-init
+# 7. Configure the Pi's EEPROM (one-time, see "Pi EEPROM setup" above)
+
+# 8. Power on — node netboots and runs cloud-init
 ```
 
 ## Development
