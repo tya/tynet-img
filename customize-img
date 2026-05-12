@@ -2,6 +2,18 @@
 set -Eeuo pipefail
 
 ################################################################################
+# paths
+################################################################################
+# Hooks ship with the deb at /usr/share/tynet-img/hooks/. When running from
+# a git checkout, fall back to ./hooks/ alongside this script.
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+if [[ -d "${SCRIPT_DIR}/hooks" ]]; then
+  HOOKS_DIR="${SCRIPT_DIR}/hooks"
+else
+  HOOKS_DIR="/usr/share/tynet-img/hooks"
+fi
+
+################################################################################
 # logging
 ################################################################################
 LOG_DIR=/var/log/tynet-img
@@ -97,8 +109,6 @@ function prepare_boot {
 # initramfs-tools (ubuntu-22.04+raspi) and installs accordingly.
 function install_overlay_hook {
   local root_dir=${1}
-  local script_dir
-  script_dir=$(dirname "$0")
 
   if [[ -x "${root_dir}/usr/bin/dracut" ]]; then
     # dracut-based image: install as a dracut module
@@ -106,8 +116,8 @@ function install_overlay_hook {
     # 90bcache module under that path even on initramfs-tools-based images.
     local module_dir="${root_dir}/usr/lib/dracut/modules.d/50overlayroot-nfs"
     mkdir -p "${module_dir}"
-    cp "${script_dir}/hooks/overlayroot-nfs-dracut-setup.sh" "${module_dir}/module-setup.sh"
-    cp "${script_dir}/hooks/overlayroot-nfs-dracut.sh"       "${module_dir}/overlayroot-nfs.sh"
+    cp "${HOOKS_DIR}/overlayroot-nfs-dracut-setup.sh" "${module_dir}/module-setup.sh"
+    cp "${HOOKS_DIR}/overlayroot-nfs-dracut.sh"       "${module_dir}/overlayroot-nfs.sh"
     chmod +x "${module_dir}/module-setup.sh" "${module_dir}/overlayroot-nfs.sh"
 
     # Force dracut to include the nfs module: dracut's 74nfs check() may return 255
@@ -122,7 +132,7 @@ DEOF
     # initramfs-tools-based image: install as init-bottom hook
     local hook_dst="${root_dir}/etc/initramfs-tools/scripts/init-bottom/overlayroot-nfs"
     mkdir -p "$(dirname "${hook_dst}")"
-    cp "${script_dir}/hooks/overlayroot-nfs" "${hook_dst}"
+    cp "${HOOKS_DIR}/overlayroot-nfs" "${hook_dst}"
     chmod +x "${hook_dst}"
   fi
 
@@ -143,7 +153,7 @@ ExecStart=/usr/local/sbin/overlayroot-nfs-sync
 WantedBy=halt.target reboot.target shutdown.target
 EOF
 
-  cp "${script_dir}/hooks/overlayroot-nfs-sync" "${root_dir}/usr/local/sbin/overlayroot-nfs-sync"
+  cp "${HOOKS_DIR}/overlayroot-nfs-sync" "${root_dir}/usr/local/sbin/overlayroot-nfs-sync"
   chmod +x "${root_dir}/usr/local/sbin/overlayroot-nfs-sync"
 
   # Enable the service
@@ -221,7 +231,12 @@ function customize-img {
   trap 'log "FAILED (exit $?) after $((SECONDS))s — see ${logfile}"' ERR
 
   step "extract-img"
-  ./extract-img "${nfs_release}"
+  # When running from a git checkout, prefer the sibling script over PATH.
+  if [[ -x "${SCRIPT_DIR}/extract-img" ]]; then
+    "${SCRIPT_DIR}/extract-img" "${nfs_release}"
+  else
+    extract-img "${nfs_release}"
+  fi
   [[ -d "${root_dir}/usr" ]] \
     || { log "extract-img produced invalid root at ${root_dir}"; exit 1; }
   log "    root: ${root_dir} (${SECONDS}s elapsed)"

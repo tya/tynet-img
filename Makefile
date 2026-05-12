@@ -1,15 +1,24 @@
+PKG = tynet-img
 OVERLAY_DIR = /exports/overlay
-ENV_FILE   ?= tynet.env
+
+# Convert hyphens to tildes so git-describe output (e.g. v0.1.0-3-gabc-dirty)
+# is a valid Debian version. Fall back to 0.0.0~dev when no tag exists yet.
+GIT_VERSION := $(shell git describe --tags --dirty 2>/dev/null | sed -e 's/^v//' -e 's/-/~/g')
+VERSION ?= $(if $(GIT_VERSION),$(GIT_VERSION),0.0.0~dev)
 
 .PHONY: help \
         pi2 pi3 pi \
         update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% \
-        logs status check-boot-config verify-% console
+        logs status check-boot-config verify-% console \
+        deb clean-deb
 
 .DEFAULT_GOAL := help
 
 help:
 	@echo "Usage: make <target>"
+	@echo ""
+	@echo "Targets assume the tynet-img deb is installed (binaries on PATH)."
+	@echo "For dev-from-checkout: PATH=.:\$$PATH make <target>"
 	@echo ""
 	@echo "Image build (run on kickstart — one per release, node-agnostic):"
 	@echo "  ubuntu-<ver>           extract + customize shared base image (e.g. make ubuntu-26.04)"
@@ -19,7 +28,6 @@ help:
 	@echo "  pi2                    provision pi2.tynet.us TFTP dir and overlay dirs"
 	@echo "  pi3                    provision pi3.tynet.us TFTP dir and overlay dirs"
 	@echo "  pi                     provision all nodes"
-	@echo "  ENV_FILE=<path> make pi2   override the default env file (tynet.env)"
 	@echo ""
 	@echo "Image maintenance (run on kickstart):"
 	@echo "  update-base            apply security patches to the shared base image"
@@ -35,17 +43,21 @@ help:
 	@echo "  verify-<node>          verify a node booted through TFTP→NFS→overlay→cloud-init→SSH (CYCLE=yes to power-cycle first)"
 	@echo "  console                listen for netconsole messages from booting nodes"
 	@echo "  logs                   show recent build log files"
+	@echo ""
+	@echo "Packaging:"
+	@echo "  deb                    build linux/arm64 .deb package into dist/ (requires nfpm)"
+	@echo "  clean-deb              remove dist/"
 
 # Pattern rule: works for any release (e.g. make ubuntu-28.04).
 # Add the new release's image URL to IMAGE_URLS in extract-img first.
 ubuntu-%:
-	sudo ./extract-img ubuntu-$* && sudo ./customize-img ubuntu-$*
+	sudo extract-img ubuntu-$* && sudo customize-img ubuntu-$*
 
 pi2:
-	TYNET_ENV=$(ENV_FILE) sudo ./build-node pi2.tynet.us
+	sudo build-node pi2.tynet.us
 
 pi3:
-	TYNET_ENV=$(ENV_FILE) sudo ./build-node pi3.tynet.us
+	sudo build-node pi3.tynet.us
 
 pi: pi2 pi3
 
@@ -105,10 +117,10 @@ wipe-all-overlays:
 	done
 
 check-boot-config:
-	TYNET_ENV=$(ENV_FILE) ./check-boot-config
+	check-boot-config
 
 status:
-	TYNET_ENV=$(ENV_FILE) ./check-status
+	check-status
 
 # Verify a node booted through the full netboot chain. Defaults to --no-cycle
 # (looks back in journal); pass CYCLE=yes to power-cycle first.
@@ -116,7 +128,7 @@ status:
 #   make verify-pi2
 #   make verify-pi3 CYCLE=yes
 verify-%:
-	TYNET_ENV=$(ENV_FILE) ./verify-boot $(if $(filter yes,$(CYCLE)),,--no-cycle) $*.$(or $(DOMAIN),tynet.us)
+	verify-boot $(if $(filter yes,$(CYCLE)),,--no-cycle) $*.$(or $(DOMAIN),tynet.us)
 
 # Listen for netconsole UDP messages from booting nodes.
 # Nodes send kernel log (including overlayroot-nfs hook output) to kickstart:6666.
@@ -133,3 +145,20 @@ logs:
 		ts=$$(basename "$$f" | sed 's/customize-img-\([0-9-]*\)-.*/\1/'); \
 		echo "$$ts  $$node  $$result  $$f"; \
 	done
+
+# Build the .deb. Modeled on tynet-cloud-init's Makefile: generate a minimal
+# changelog.gz, then hand off to nfpm.
+deb:
+	@command -v nfpm >/dev/null || { echo "install nfpm: https://nfpm.goreleaser.com/install/"; exit 1; }
+	mkdir -p dist
+	{ \
+	  echo "$(PKG) ($(VERSION)) stable; urgency=low"; \
+	  echo ""; \
+	  echo "  * See https://github.com/tya/tynet-img/releases/tag/v$(VERSION) for details."; \
+	  echo ""; \
+	  echo " -- Ty Alexander <ty.alexander@gmail.com>  $$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"; \
+	} | gzip -9 -n > dist/changelog.gz
+	VERSION=$(VERSION) nfpm package -f packaging/nfpm.yaml -p deb -t dist/
+
+clean-deb:
+	rm -rf dist

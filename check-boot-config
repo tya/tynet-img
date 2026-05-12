@@ -6,8 +6,7 @@
 
 set -euo pipefail
 
-SCRIPT_DIR=$(dirname "$0")
-env_file="${TYNET_ENV:-${SCRIPT_DIR}/tynet.env}"
+env_file="${TYNET_ENV:-/etc/tynet-img/tynet.env}"
 # shellcheck source=/dev/null
 source "${env_file}"
 
