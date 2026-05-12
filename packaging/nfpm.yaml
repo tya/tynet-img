@@ -1,0 +1,151 @@
+name: tynet-img
+arch: arm64
+platform: linux
+version: ${VERSION}
+section: admin
+priority: optional
+maintainer: Ty Alexander <ty.alexander@gmail.com>
+description: |
+  Raspberry Pi netboot image build + per-node provisioning scripts
+  for tynet's kickstart host. Manages NFS-rooted Ubuntu images,
+  per-node TFTP dirs, overlayfs upper-layer state.
+homepage: https://github.com/tya/tynet-img
+license: Proprietary
+depends:
+  - kpartx
+  - wget
+  - xz-utils
+  - rsync
+  - systemd-container
+  - e2fsprogs
+  - nfs-kernel-server
+  - tftpd-hpa
+  - rpcbind
+  - openssh-client
+  - curl
+  - iputils-ping
+contents:
+  # Root-required executables
+  - src: ./extract-img
+    dst: /usr/sbin/extract-img
+    file_info:
+      mode: 0755
+  - src: ./customize-img
+    dst: /usr/sbin/customize-img
+    file_info:
+      mode: 0755
+  - src: ./build-node
+    dst: /usr/sbin/build-node
+    file_info:
+      mode: 0755
+
+  # Read-only status / verification commands
+  - src: ./check-status
+    dst: /usr/bin/check-status
+    file_info:
+      mode: 0755
+  - src: ./check-boot-config
+    dst: /usr/bin/check-boot-config
+    file_info:
+      mode: 0755
+  - src: ./verify-boot
+    dst: /usr/bin/verify-boot
+    file_info:
+      mode: 0755
+  - src: ./check-netboot
+    dst: /usr/bin/check-netboot
+    file_info:
+      mode: 0755
+
+  # Hooks: data injected into Pi images by customize-img, not executed on the host
+  - src: ./hooks/overlayroot-nfs
+    dst: /usr/share/tynet-img/hooks/overlayroot-nfs
+    file_info:
+      mode: 0755
+  - src: ./hooks/overlayroot-nfs-sync
+    dst: /usr/share/tynet-img/hooks/overlayroot-nfs-sync
+    file_info:
+      mode: 0755
+  - src: ./hooks/overlayroot-nfs-dracut.sh
+    dst: /usr/share/tynet-img/hooks/overlayroot-nfs-dracut.sh
+    file_info:
+      mode: 0755
+  - src: ./hooks/overlayroot-nfs-dracut-setup.sh
+    dst: /usr/share/tynet-img/hooks/overlayroot-nfs-dracut-setup.sh
+    file_info:
+      mode: 0755
+  - src: ./hooks/overlayroot-nfs-dracut-test.sh
+    dst: /usr/share/tynet-img/hooks/overlayroot-nfs-dracut-test.sh
+    file_info:
+      mode: 0755
+  - src: ./hooks/overlayroot-nfs-prepivot.sh
+    dst: /usr/share/tynet-img/hooks/overlayroot-nfs-prepivot.sh
+    file_info:
+      mode: 0755
+  - src: ./hooks/overlayroot-nfs-finished.sh
+    dst: /usr/share/tynet-img/hooks/overlayroot-nfs-finished.sh
+    file_info:
+      mode: 0755
+  - src: ./hooks/overlayroot-nfs-early.service
+    dst: /usr/share/tynet-img/hooks/overlayroot-nfs-early.service
+    file_info:
+      mode: 0644
+
+  # Systemd units (run on the kickstart host)
+  - src: ./packaging/update-base.service
+    dst: /lib/systemd/system/update-base.service
+    file_info:
+      mode: 0644
+  - src: ./packaging/update-base.timer
+    dst: /lib/systemd/system/update-base.timer
+    file_info:
+      mode: 0644
+
+  # System config (noreplace so local edits stick across upgrades)
+  - src: ./packaging/tftpd-hpa.default
+    dst: /etc/default/tftpd-hpa
+    type: config|noreplace
+    file_info:
+      mode: 0644
+  - src: ./packaging/logrotate.conf
+    dst: /etc/logrotate.d/tynet-img
+    type: config|noreplace
+    file_info:
+      mode: 0644
+
+  # Empty config dir — Ansible drops tynet.env here at 0600 root:root
+  - dst: /etc/tynet-img
+    type: dir
+    file_info:
+      mode: 0755
+
+  # Docs
+  - src: ./README.md
+    dst: /usr/share/doc/tynet-img/README.md
+    file_info:
+      mode: 0644
+  - src: ./tynet.env.example
+    dst: /usr/share/doc/tynet-img/tynet.env.example
+    file_info:
+      mode: 0644
+  - src: ./Makefile
+    dst: /usr/share/doc/tynet-img/Makefile.reference
+    file_info:
+      mode: 0644
+  - src: ./packaging/copyright
+    dst: /usr/share/doc/tynet-img/copyright
+    file_info:
+      mode: 0644
+  - src: ./dist/changelog.gz
+    dst: /usr/share/doc/tynet-img/changelog.gz
+    file_info:
+      mode: 0644
+  - src: ./packaging/lintian-overrides
+    dst: /usr/share/lintian/overrides/tynet-img
+    file_info:
+      mode: 0644
+
+scripts:
+  postinstall: ./packaging/postinst.sh
+  preremove: ./packaging/prerm.sh
+  postremove: ./packaging/postrm.sh

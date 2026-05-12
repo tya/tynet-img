@@ -1,0 +1,10 @@
+# We invoke `systemctl` directly in postinst/prerm rather than going through
+# deb-systemd-helper / invoke-rc.d. This package targets only systemd-based
+# kickstart hosts (internal infra) so the fallback machinery isn't load-bearing.
+tynet-img: maintainer-script-calls-systemctl
+
+# Hooks under /usr/share/tynet-img/hooks/ are scripts copied verbatim into Pi
+# images by customize-img — they aren't intended to execute from /usr/share/
+# on the kickstart host. The executable bit is preserved so they land on the
+# target image already runnable.
+tynet-img: script-not-executable [usr/share/tynet-img/hooks/*]
