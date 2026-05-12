@@ -1,6 +1,6 @@
 # tynet-img
 
-Scripts for building Raspberry Pi netboot images and provisioning nodes. Bash-only — kickstart host provisioning (packages, services, NFS config) lives in `../tynet-infra`.
+Scripts for building Raspberry Pi netboot images and provisioning nodes. Bash-only — kickstart host provisioning (packages, services, NFS config) lives in `~/src/tynet-infra`.
 
 ## How it works
 
@@ -24,7 +24,7 @@ Pi (power on)
 
 ## Installation
 
-`tynet-img` ships as a Debian `.deb` published to the [tynet-apt repository](https://tya.github.io/tynet-apt/) and installed on the kickstart host via Ansible in `../tynet-infra`. The package depends on `kpartx`, `wget`, `xz-utils`, `rsync`, `systemd-container`, `e2fsprogs`, `nfs-kernel-server`, `tftpd-hpa`, `rpcbind`, `openssh-client`, `curl`, and `iputils-ping`; apt pulls those in automatically.
+`tynet-img` ships as a Debian `.deb` published to the [tynet-apt repository](https://tya.github.io/tynet-apt/) and installed on the kickstart host via Ansible in `~/src/tynet-infra`. The package depends on `kpartx`, `wget`, `xz-utils`, `rsync`, `systemd-container`, `e2fsprogs`, `nfs-kernel-server`, `tftpd-hpa`, `rpcbind`, `openssh-client`, `curl`, and `iputils-ping`; apt pulls those in automatically.
 
 ```bash
 # Bootstrap the tynet apt source (one-time, handled by tynet-infra Ansible):
@@ -37,7 +37,7 @@ sudo apt-get update
 sudo apt-get install tynet-img
 ```
 
-In production this entire dance is done by `make kickstart` in `../tynet-infra`.
+In production this entire dance is done by `make kickstart` in `~/src/tynet-infra`.
 
 ### What the package installs
 
@@ -155,7 +155,7 @@ make pi   # all nodes
 
 Bash-sourceable node inventory at `/etc/tynet-img/tynet.env` (mode `0600 root:root`). Used by `build-node`, `check-status`, `check-boot-config`, and `verify-boot`. Each script lets you override the path with `TYNET_ENV=<path>`.
 
-**Source of truth lives in `../tynet-infra`.** The real `tynet.env` is rendered onto the kickstart host by the kickstart Ansible role from `tynet-infra/inventory/group_vars/all.yml` and `tynet-infra/inventory/host_vars/<host>.yml`. To change a node's config, edit those files and re-run `make kickstart` in tynet-infra. The file is gitignored in this repo; `tynet.env.example` (shipped to `/usr/share/doc/tynet-img/`) documents the format for reference.
+**Source of truth lives in `~/src/tynet-infra`.** The real `tynet.env` is rendered onto the kickstart host by the kickstart Ansible role from `tynet-infra/inventory/group_vars/all.yml` and `tynet-infra/inventory/host_vars/<host>.yml`. To change a node's config, edit those files and re-run `make kickstart` in tynet-infra. The file is gitignored in this repo; `tynet.env.example` (shipped to `/usr/share/doc/tynet-img/`) documents the format for reference.
 
 ```bash
 KICKSTART_IP=10.0.60.100
@@ -199,10 +199,10 @@ The upper layer is tmpfs by default (Linux 6.x requires `RENAME_WHITEOUT` suppor
 
 ## Kickstart host provisioning
 
-Kickstart host setup (the tynet-apt source, `tynet-img` and `tynet-cloud-init` package installs, NFS exports template, cloud-init seed files, SSH keys) is managed by Ansible in `../tynet-infra`:
+Kickstart host setup (the tynet-apt source, `tynet-img` and `tynet-cloud-init` package installs, NFS exports template, cloud-init seed files, SSH keys) is managed by Ansible in `~/src/tynet-infra`:
 
 ```bash
-cd ../tynet-infra
+cd ~/src/tynet-infra
 make kickstart       # apt-installs tynet-img + tynet-cloud-init, renders /etc/tynet-img/tynet.env, /etc/exports, cloud-init seeds
 make nodes           # deploy SSH host keys to Pi nodes (from 1Password)
 make reboot-nodes    # graceful drain + reboot all nodes
@@ -235,7 +235,7 @@ make deb                 # build the .deb locally (requires nfpm)
 make clean-deb           # remove dist/
 ```
 
-Power-cycling and k8s-aware reboots live in `../tynet-infra` (`make cycle-pi2`, `make cycle-pi3`, `make reboot-nodes`).
+Power-cycling and k8s-aware reboots live in `~/src/tynet-infra` (`make cycle-pi2`, `make cycle-pi3`, `make reboot-nodes`).
 
 ## Provisioning a new node
 
@@ -248,7 +248,7 @@ Power-cycling and k8s-aware reboots live in `../tynet-infra` (`make cycle-pi2`, 
 
 # 3. Re-run kickstart Ansible — renders /etc/tynet-img/tynet.env + per-node cloud-init seed files,
 #    updates NFS exports:
-cd ../tynet-infra && make kickstart
+cd ~/src/tynet-infra && make kickstart
 
 # 4. Build base image if not already done:
 make ubuntu-22.04    # or ubuntu-26.04
@@ -257,7 +257,7 @@ make ubuntu-22.04    # or ubuntu-26.04
 make pi2   # or whichever node
 
 # 6. Deploy SSH host key:
-cd ../tynet-infra && make nodes LIMIT=pi2.tynet.us
+cd ~/src/tynet-infra && make nodes LIMIT=pi2.tynet.us
 
 # 7. Power on — node netboots and runs cloud-init
 ```
