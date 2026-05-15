@@ -6,6 +6,12 @@ OVERLAY_DIR = /exports/overlay
 GIT_VERSION := $(shell git describe --tags --dirty 2>/dev/null | sed -e 's/^v//' -e 's/-/~/g')
 VERSION ?= $(if $(GIT_VERSION),$(GIT_VERSION),0.0.0~dev)
 
+# Prefer scripts alongside this Makefile (dev-from-checkout) over $PATH.
+# When the .deb is installed on the kickstart host the scripts live in
+# /usr/sbin/ and /usr/bin/ — recipes below should still work via $PATH.
+# Resolved once at parse time; recipes use $(BIN)<script-name>.
+BIN := $(if $(wildcard ./check-status),./,)
+
 .PHONY: help \
         pi2 pi3 pi \
         update-base wipe-overlay-% wipe-all-overlays wipe-tftp wipe-tftp-% wipe-release-% \
@@ -17,8 +23,8 @@ VERSION ?= $(if $(GIT_VERSION),$(GIT_VERSION),0.0.0~dev)
 help:
 	@echo "Usage: make <target>"
 	@echo ""
-	@echo "Targets assume the tynet-img deb is installed (binaries on PATH)."
-	@echo "For dev-from-checkout: PATH=.:\$$PATH make <target>"
+	@echo "Recipes auto-detect: ./<script> when run from a checkout, otherwise"
+	@echo "<script> via \$$PATH (e.g. the kickstart host with the .deb installed)."
 	@echo ""
 	@echo "Image build (run on kickstart — one per release, node-agnostic):"
 	@echo "  ubuntu-<ver>           extract + customize shared base image (e.g. make ubuntu-26.04)"
@@ -51,13 +57,13 @@ help:
 # Pattern rule: works for any release (e.g. make ubuntu-28.04).
 # Add the new release's image URL to IMAGE_URLS in extract-img first.
 ubuntu-%:
-	sudo extract-img ubuntu-$* && sudo customize-img ubuntu-$*
+	sudo $(BIN)extract-img ubuntu-$* && sudo $(BIN)customize-img ubuntu-$*
 
 pi2:
-	sudo build-node pi2.tynet.us
+	sudo $(BIN)build-node pi2.tynet.us
 
 pi3:
-	sudo build-node pi3.tynet.us
+	sudo $(BIN)build-node pi3.tynet.us
 
 pi: pi2 pi3
 
@@ -117,10 +123,10 @@ wipe-all-overlays:
 	done
 
 check-boot-config:
-	check-boot-config
+	$(BIN)check-boot-config
 
 status:
-	check-status
+	$(BIN)check-status
 
 # Verify a node booted through the full netboot chain. Defaults to --no-cycle
 # (looks back in journal); pass CYCLE=yes to power-cycle first.
@@ -128,7 +134,7 @@ status:
 #   make verify-pi2
 #   make verify-pi3 CYCLE=yes
 verify-%:
-	verify-boot $(if $(filter yes,$(CYCLE)),,--no-cycle) $*.$(or $(DOMAIN),tynet.us)
+	$(BIN)verify-boot $(if $(filter yes,$(CYCLE)),,--no-cycle) $*.$(or $(DOMAIN),tynet.us)
 
 # Listen for netconsole UDP messages from booting nodes.
 # Nodes send kernel log (including overlayroot-nfs hook output) to kickstart:6666.
